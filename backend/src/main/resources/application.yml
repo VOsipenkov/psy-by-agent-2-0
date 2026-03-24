@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: dream-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/dreams}
+    username: ${SPRING_DATASOURCE_USERNAME:dream}
+    password: ${SPRING_DATASOURCE_PASSWORD:dream}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  ollama:
+    base-url: ${APP_OLLAMA_BASE_URL:http://localhost:11434}
+    model: ${APP_OLLAMA_MODEL:llama3.1:8b}
+    timeout: ${APP_OLLAMA_TIMEOUT:45s}
