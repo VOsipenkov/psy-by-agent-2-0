@@ -40,17 +40,22 @@ public class OllamaDreamAiService implements DreamAiService {
     public DreamAiResult generateReply(DreamConversation conversation) {
         try {
             String prompt = buildPrompt(conversation);
-            OllamaGenerateResponse response = ollamaRestClient.post()
+            String rawBody = ollamaRestClient.post()
                 .uri("/api/generate")
                 .body(new OllamaGenerateRequest(ollamaProperties.getModel(), prompt, false, "json"))
                 .retrieve()
-                .body(OllamaGenerateResponse.class);
+                .body(String.class);
 
-            if (response == null || !StringUtils.hasText(response.response())) {
+            if (!StringUtils.hasText(rawBody)) {
                 return fallback(conversation);
             }
 
-            String normalizedJson = normalizeJson(response.response());
+            String responseText = extractResponseText(rawBody);
+            if (!StringUtils.hasText(responseText)) {
+                return fallback(conversation);
+            }
+
+            String normalizedJson = normalizeJson(responseText);
             OllamaAnalysisPayload payload = objectMapper.readValue(normalizedJson, OllamaAnalysisPayload.class);
             return toResult(payload, conversation);
         } catch (Exception exception) {
@@ -182,6 +187,19 @@ public class OllamaDreamAiService implements DreamAiService {
                 .append('\n'));
 
         return builder.toString();
+    }
+
+    private String extractResponseText(String rawBody) {
+        try {
+            OllamaGenerateResponse response = objectMapper.readValue(rawBody, OllamaGenerateResponse.class);
+            if (response != null && StringUtils.hasText(response.response())) {
+                return response.response();
+            }
+        } catch (Exception exception) {
+            log.debug("Could not deserialize Ollama response envelope directly, using raw body");
+        }
+
+        return rawBody;
     }
 
     private String normalizeJson(String rawResponse) {
