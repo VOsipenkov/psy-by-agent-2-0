@@ -3,6 +3,8 @@ package com.psybyagent.dreams.dream;
 import com.psybyagent.dreams.ai.DreamAiResult;
 import com.psybyagent.dreams.ai.DreamAiService;
 import com.psybyagent.dreams.common.NotFoundException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -56,7 +58,8 @@ public class DreamConversationService {
         conversation.setStage(conversation.getStage() == DreamStage.NEW ? DreamStage.CLARIFYING : conversation.getStage());
         conversation = dreamConversationRepository.saveAndFlush(conversation);
 
-        DreamAiResult aiResult = dreamAiService.generateReply(conversation);
+        List<DreamConversation> recentDreams = findRecentDreamsForAnalysis(conversation);
+        DreamAiResult aiResult = dreamAiService.generateReply(conversation, recentDreams);
 
         if (aiResult.stage() == DreamStage.INTERPRETED) {
             conversation.setStage(DreamStage.INTERPRETED);
@@ -71,6 +74,16 @@ public class DreamConversationService {
         conversation.addMessage(DreamMessage.assistant(aiResult.assistantMessage()));
         DreamConversation saved = dreamConversationRepository.saveAndFlush(conversation);
         return toDetail(saved);
+    }
+
+    private List<DreamConversation> findRecentDreamsForAnalysis(DreamConversation conversation) {
+        Instant recentThreshold = Instant.now().minus(7, ChronoUnit.DAYS);
+
+        return dreamConversationRepository.findTop5ByUserAccountIdAndIdNotAndUpdatedAtAfterOrderByUpdatedAtDesc(
+            conversation.getUserAccount().getId(),
+            conversation.getId(),
+            recentThreshold
+        );
     }
 
     @Transactional

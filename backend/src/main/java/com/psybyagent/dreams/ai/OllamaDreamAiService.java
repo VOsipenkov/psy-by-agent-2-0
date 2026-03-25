@@ -54,9 +54,11 @@ public class OllamaDreamAiService implements DreamAiService {
     private final DreamInterpretationRagService dreamInterpretationRagService;
 
     @Override
-    public DreamAiResult generateReply(DreamConversation conversation) {
+    public DreamAiResult generateReply(DreamConversation conversation, List<DreamConversation> recentDreams) {
+        List<DreamConversation> recentDreamContext = recentDreams == null ? List.of() : recentDreams;
+
         try {
-            String prompt = buildPrompt(conversation);
+            String prompt = buildPrompt(conversation, recentDreamContext);
             String requestBody = objectMapper.writeValueAsString(
                 new OllamaGenerateRequest(ollamaProperties.getModel(), prompt, false, "json")
             );
@@ -74,33 +76,46 @@ public class OllamaDreamAiService implements DreamAiService {
             );
 
             if (response.statusCode() >= 400 || !StringUtils.hasText(response.body())) {
-                return fallback(conversation);
+                return fallback(conversation, recentDreamContext);
             }
 
             String responseText = extractResponseText(response.body());
             if (!StringUtils.hasText(responseText)) {
-                return fallback(conversation);
+                return fallback(conversation, recentDreamContext);
             }
 
             String normalizedJson = normalizeJson(responseText);
             OllamaAnalysisPayload payload = objectMapper.readValue(normalizedJson, OllamaAnalysisPayload.class);
-            return toResult(payload, conversation);
+            return toResult(payload, conversation, recentDreamContext);
         } catch (Exception exception) {
             log.warn("Falling back to local dream analysis because Ollama call failed: {}", exception.getMessage());
-            return fallback(conversation);
+            return fallback(conversation, recentDreamContext);
         }
     }
 
-    private DreamAiResult toResult(OllamaAnalysisPayload payload, DreamConversation conversation) {
+    private DreamAiResult toResult(
+        OllamaAnalysisPayload payload,
+        DreamConversation conversation,
+        List<DreamConversation> recentDreams
+    ) {
         DreamStage stage = "INTERPRETED".equalsIgnoreCase(payload.stage())
             ? DreamStage.INTERPRETED
             : DreamStage.CLARIFYING;
 
         if (stage == DreamStage.INTERPRETED) {
             List<String> keywords = sanitizeKeywords(payload.keywords(), conversation);
-            String interpretation = sanitizeOutputText(StringUtils.hasText(payload.interpretation())
+            String interpretationSource = StringUtils.hasText(payload.interpretation())
                 ? payload.interpretation().trim()
-                : payload.assistantMessage().trim());
+                : payload.assistantMessage();
+            if (!StringUtils.hasText(interpretationSource)) {
+                return fallback(conversation, recentDreams);
+            }
+
+            String interpretation = sanitizeOutputText(interpretationSource.trim());
+            interpretation = mergeRecurringInsight(
+                interpretation,
+                buildRecurringDreamsInsight(keywords, recentDreams)
+            );
             String assistantMessage = sanitizeOutputText(StringUtils.hasText(payload.assistantMessage())
                 ? payload.assistantMessage().trim()
                 : interpretation);
@@ -116,7 +131,7 @@ public class OllamaDreamAiService implements DreamAiService {
         }
 
         if (countUserMessages(conversation) >= 3) {
-            return fallback(conversation);
+            return fallback(conversation, recentDreams);
         }
 
         String assistantMessage = sanitizeOutputText(StringUtils.hasText(payload.assistantMessage())
@@ -132,7 +147,7 @@ public class OllamaDreamAiService implements DreamAiService {
         );
     }
 
-    private DreamAiResult fallback(DreamConversation conversation) {
+    private DreamAiResult fallback(DreamConversation conversation, List<DreamConversation> recentDreams) {
         List<String> userMessages = conversation.getMessages().stream()
             .filter(message -> message.getRole() == ChatRole.USER)
             .map(DreamMessage::getContent)
@@ -155,6 +170,10 @@ public class OllamaDreamAiService implements DreamAiService {
         String title = chooseTitle(null, keywords, conversation);
         String interpretation = "¬ этом сне особенно заметны символы %s. “акой сюжет обычно св€зан с внутренним напр€жением, попыткой что-то осмыслить и потребностью вернуть себе ощущение опоры. ¬ажно прислушатьс€ к тому, какие чувства сон оставил после пробуждени€ и с чем они перекликаютс€ в вашей текущей жизни."
             .formatted(String.join(", ", keywords));
+        interpretation = mergeRecurringInsight(
+            interpretation,
+            buildRecurringDreamsInsight(keywords, recentDreams)
+        );
 
         return new DreamAiResult(
             DreamStage.INTERPRETED,
@@ -165,8 +184,9 @@ public class OllamaDreamAiService implements DreamAiService {
         );
     }
 
-    private String buildPrompt(DreamConversation conversation) {
+    private String buildPrompt(DreamConversation conversation, List<DreamConversation> recentDreams) {
         String ragContext = dreamInterpretationRagService.buildContext(conversation);
+        String recentDreamsContext = buildRecentDreamsContext(conversation, recentDreams);
         StringBuilder builder = new StringBuilder();
         builder.append("""
             You are a Russian-speaking psychotherapist who specializes in dream interpretation.
@@ -206,11 +226,15 @@ public class OllamaDreamAiService implements DreamAiService {
             6. For stage=INTERPRETED, assistantMessage should be a short conversational lead-in, and interpretation should be the fuller final reading.
             7. interpretation must synthesize symbols and emotions into a direct reading without citing any source or naming any school.
             8. title should capture the emotional core or central movement of the dream, not just repeat a random noun from the story.
-            9. No text outside JSON.
+            9. If recent dreams clearly show repeating symbols, emotions, places, or relationships, you may mention that repetition as a careful hypothesis.
+            10. Only mention cross-dream links when they are clearly supported by the recent-dream context below.
+            11. No text outside JSON.
 
             Retrieved knowledge context:
             """);
         builder.append(ragContext).append("\n\n");
+        builder.append("Recent dreams from the last 7 days:\n");
+        builder.append(recentDreamsContext).append("\n\n");
         builder.append("Chat history:\n");
 
         conversation.getMessages().stream()
@@ -220,6 +244,39 @@ public class OllamaDreamAiService implements DreamAiService {
                 .append('\n'));
 
         return builder.toString();
+    }
+
+    private String buildRecentDreamsContext(DreamConversation conversation, List<DreamConversation> recentDreams) {
+        if (recentDreams == null || recentDreams.isEmpty()) {
+            return "None";
+        }
+
+        StringBuilder builder = new StringBuilder();
+        builder.append(buildRecurringDreamsObservation(conversation, recentDreams)).append('\n');
+
+        for (DreamConversation recentDream : recentDreams) {
+            builder.append("- Title: ").append(formatDreamTitle(recentDream)).append('\n');
+            builder.append("  Stage: ").append(recentDream.getStage().name()).append('\n');
+            builder.append("  UpdatedAt: ").append(recentDream.getUpdatedAt()).append('\n');
+
+            List<String> keywords = keywordsForAnalysis(recentDream);
+            if (!keywords.isEmpty()) {
+                builder.append("  Keywords: ").append(String.join(", ", keywords)).append('\n');
+            }
+
+            String summary = summarizeConversation(recentDream);
+            if (StringUtils.hasText(summary)) {
+                builder.append("  Dream summary: ").append(summary).append('\n');
+            }
+
+            if (StringUtils.hasText(recentDream.getInterpretation())) {
+                builder.append("  Interpretation summary: ")
+                    .append(trimExcerpt(recentDream.getInterpretation(), 220))
+                    .append('\n');
+            }
+        }
+
+        return builder.toString().trim();
     }
 
     private URI buildGenerateUri() {
@@ -305,6 +362,138 @@ public class OllamaDreamAiService implements DreamAiService {
         }
 
         return List.copyOf(unique);
+    }
+
+    private List<String> keywordsForAnalysis(DreamConversation conversation) {
+        List<String> keywords = conversation.getKeywords().isEmpty()
+            ? extractKeywords(firstNonBlank(
+                extractUserNarrative(conversation),
+                conversation.getInterpretation()
+            ))
+            : sanitizeKeywords(conversation.getKeywords(), conversation);
+
+        return keywords.stream()
+            .filter(keyword -> !Set.of("сон", "символ").contains(keyword))
+            .toList();
+    }
+
+    private String buildRecurringDreamsObservation(
+        DreamConversation conversation,
+        List<DreamConversation> recentDreams
+    ) {
+        List<String> currentKeywords = keywordsForAnalysis(conversation);
+        if (currentKeywords.isEmpty()) {
+            return "Automatic overlap scan: no clear motifs detected yet.";
+        }
+
+        List<String> matches = new ArrayList<>();
+        for (DreamConversation recentDream : recentDreams) {
+            List<String> sharedKeywords = findSharedKeywords(currentKeywords, recentDream);
+            if (!sharedKeywords.isEmpty()) {
+                matches.add("%s [%s]".formatted(
+                    formatDreamTitle(recentDream),
+                    String.join(", ", sharedKeywords)
+                ));
+            }
+        }
+
+        if (matches.isEmpty()) {
+            return "Automatic overlap scan: no clear repeated motifs detected.";
+        }
+
+        return "Automatic overlap scan: possible recurring motifs with recent dreams -> "
+            + String.join("; ", matches)
+            + ". Mention continuity only if it genuinely fits the full dream context.";
+    }
+
+    private String buildRecurringDreamsInsight(List<String> currentKeywords, List<DreamConversation> recentDreams) {
+        if (recentDreams == null || recentDreams.isEmpty() || currentKeywords == null || currentKeywords.isEmpty()) {
+            return null;
+        }
+
+        LinkedHashSet<String> recurringKeywords = new LinkedHashSet<>();
+        LinkedHashSet<String> relatedDreams = new LinkedHashSet<>();
+
+        for (DreamConversation recentDream : recentDreams) {
+            List<String> sharedKeywords = findSharedKeywords(currentKeywords, recentDream);
+            if (!sharedKeywords.isEmpty()) {
+                recurringKeywords.addAll(sharedKeywords);
+                relatedDreams.add(formatDreamTitle(recentDream));
+            }
+        }
+
+        if (recurringKeywords.isEmpty()) {
+            return null;
+        }
+
+        return "ѕохожие мотивы уже по€вл€лись и в недавних снах за последнюю неделю (%s): %s. Ёто может указывать на повтор€ющуюс€ внутреннюю тему, к которой психика снова возвращаетс€."
+            .formatted(String.join(", ", relatedDreams), String.join(", ", recurringKeywords));
+    }
+
+    private List<String> findSharedKeywords(List<String> currentKeywords, DreamConversation recentDream) {
+        List<String> recentKeywords = keywordsForAnalysis(recentDream);
+        LinkedHashSet<String> sharedKeywords = new LinkedHashSet<>();
+
+        for (String currentKeyword : currentKeywords) {
+            String normalizedCurrentKeyword = currentKeyword.toLowerCase(Locale.ROOT);
+            for (String recentKeyword : recentKeywords) {
+                if (normalizedCurrentKeyword.equals(recentKeyword.toLowerCase(Locale.ROOT))) {
+                    sharedKeywords.add(normalizedCurrentKeyword);
+                }
+            }
+        }
+
+        return List.copyOf(sharedKeywords);
+    }
+
+    private String mergeRecurringInsight(String interpretation, String recurringInsight) {
+        if (!StringUtils.hasText(recurringInsight)) {
+            return interpretation;
+        }
+
+        if (!StringUtils.hasText(interpretation)) {
+            return recurringInsight;
+        }
+
+        String normalizedInterpretation = interpretation.toLowerCase(Locale.ROOT);
+        if (normalizedInterpretation.contains("повтор€")
+            || normalizedInterpretation.contains("переклика")
+            || normalizedInterpretation.contains("снова возвращ")) {
+            return interpretation;
+        }
+
+        return interpretation + " " + recurringInsight;
+    }
+
+    private String summarizeConversation(DreamConversation conversation) {
+        return trimExcerpt(extractUserNarrative(conversation), 220);
+    }
+
+    private String trimExcerpt(String text, int maxLength) {
+        if (!StringUtils.hasText(text)) {
+            return "";
+        }
+
+        String normalizedText = text.replaceAll("\\s+", " ").trim();
+        if (normalizedText.length() <= maxLength) {
+            return normalizedText;
+        }
+
+        return normalizedText.substring(0, maxLength - 3).trim() + "...";
+    }
+
+    private String formatDreamTitle(DreamConversation conversation) {
+        return StringUtils.hasText(conversation.getTitle()) ? conversation.getTitle().trim() : "Ќедавний сон";
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return value;
+            }
+        }
+
+        return "";
     }
 
     private String buildTitleFromKeywords(List<String> keywords) {
