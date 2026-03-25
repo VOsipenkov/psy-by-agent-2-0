@@ -463,20 +463,28 @@ body::after {
 
 .dream-card-head {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 12px;
+  row-gap: 6px;
 }
 
 .dream-card-head strong {
   font-size: 14px;
+  min-width: 0;
+  display: block;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .dream-card-meta {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
+  grid-column: 2;
+  max-width: 100%;
+  flex-wrap: wrap;
 }
 
 .dream-card-grip {
@@ -485,6 +493,7 @@ body::after {
   font-size: 16px;
   line-height: 1;
   transform: translateY(1px);
+  grid-row: 1 / span 2;
 }
 
 .dream-card-spinner {

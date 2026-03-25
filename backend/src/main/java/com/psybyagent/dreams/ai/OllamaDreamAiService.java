@@ -35,6 +35,15 @@ public class OllamaDreamAiService implements DreamAiService {
         "это", "этот", "она", "они", "его", "ее", "мы", "вы", "ты", "я", "сон", "сна",
         "потом", "когда", "где", "или", "под", "над", "из", "за", "для", "очень"
     );
+    private static final Set<String> TITLE_FILLER_WORDS = Set.of(
+        "такие", "такой", "такая", "такое",
+        "эти", "этот", "эта", "это",
+        "какие", "какой", "какая", "какое",
+        "так", "просто"
+    );
+    private static final Set<String> TITLE_GENERIC_WORDS = Set.of(
+        "человек", "люди", "людьми", "женщина", "мужчина", "кто-то", "ктото"
+    );
 
     private final HttpClient httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(20))
@@ -299,7 +308,14 @@ public class OllamaDreamAiService implements DreamAiService {
     }
 
     private String buildTitleFromKeywords(List<String> keywords) {
-        List<String> titleWords = keywords.stream().limit(2).toList();
+        List<String> titleWords = keywords.stream()
+            .filter(StringUtils::hasText)
+            .map(String::trim)
+            .map(keyword -> keyword.toLowerCase(Locale.ROOT))
+            .filter(keyword -> !isWeakTitleWord(keyword))
+            .limit(2)
+            .toList();
+
         if (titleWords.isEmpty()) {
             return "Новый сон";
         }
@@ -377,6 +393,7 @@ public class OllamaDreamAiService implements DreamAiService {
 
     private boolean isWeakTitle(String title, List<String> keywords) {
         String normalized = title.toLowerCase(Locale.ROOT);
+        String[] words = normalized.split("\\s+");
 
         if (!StringUtils.hasText(normalized) || "новый сон".equals(normalized)) {
             return true;
@@ -386,13 +403,34 @@ public class OllamaDreamAiService implements DreamAiService {
             return true;
         }
 
-        if (normalized.split("\\s+").length > 2) {
+        if (words.length > 2) {
+            return true;
+        }
+
+        if (!normalized.matches("(?iu)[\\p{L}\\p{N}-]+(?:\\s+[\\p{L}\\p{N}-]+)?")) {
+            return true;
+        }
+
+        for (String word : words) {
+            if (isWeakTitleWord(word)) {
+                return true;
+            }
+        }
+
+        if (words.length == 2 && words[0].equals(words[1])) {
             return true;
         }
 
         return keywords.stream()
             .map(keyword -> keyword.toLowerCase(Locale.ROOT))
             .anyMatch(normalized::equals);
+    }
+
+    private boolean isWeakTitleWord(String word) {
+        String normalizedWord = word.toLowerCase(Locale.ROOT);
+        return STOP_WORDS.contains(normalizedWord)
+            || TITLE_FILLER_WORDS.contains(normalizedWord)
+            || TITLE_GENERIC_WORDS.contains(normalizedWord);
     }
 
     private String normalizeTitle(String title) {
