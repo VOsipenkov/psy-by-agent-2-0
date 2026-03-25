@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+п»їimport { useEffect, useMemo, useState } from 'react';
 import {
   createDream,
   deleteDream,
@@ -146,7 +146,7 @@ function App() {
     }
 
     const target = dreams.find((dream) => dream.id === dreamId);
-    const accepted = window.confirm(`Удалить сон "${target?.title ?? 'Без названия'}" вместе с перепиской?`);
+    const accepted = window.confirm(`РЈРґР°Р»РёС‚СЊ СЃРѕРЅ "${target?.title ?? 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'}" РІРјРµСЃС‚Рµ СЃ РїРµСЂРµРїРёСЃРєРѕР№?`);
 
     if (!accepted) {
       return;
@@ -185,7 +185,7 @@ function App() {
       return 'Dream Journal';
     }
 
-    return `${user.username}, ваши сны`;
+    return `${user.username}, РІР°С€Рё СЃРЅС‹`;
   }, [user]);
 
   if (!user) {
@@ -193,37 +193,37 @@ function App() {
       <div className="auth-shell">
         <div className="auth-card">
           <p className="eyebrow">Dream Journal</p>
-          <h1>Расскажите сон, а мы превратим его в смысл</h1>
+          <h1>Р Р°СЃСЃРєР°Р¶РёС‚Рµ СЃРѕРЅ, Р° РјС‹ РїСЂРµРІСЂР°С‚РёРј РµРіРѕ РІ СЃРјС‹СЃР»</h1>
           <p className="lead">
-            Сервис ведет диалог, задает уточняющие вопросы и собирает интерпретацию сна с ключевыми образами.
+            РЎРµСЂРІРёСЃ РІРµРґРµС‚ РґРёР°Р»РѕРі, Р·Р°РґР°РµС‚ СѓС‚РѕС‡РЅСЏСЋС‰РёРµ РІРѕРїСЂРѕСЃС‹ Рё СЃРѕР±РёСЂР°РµС‚ РёРЅС‚РµСЂРїСЂРµС‚Р°С†РёСЋ СЃРЅР° СЃ РєР»СЋС‡РµРІС‹РјРё РѕР±СЂР°Р·Р°РјРё.
           </p>
           <form className="auth-form" onSubmit={handleLogin}>
-            <label htmlFor="username">Логин</label>
+            <label htmlFor="username">Р›РѕРіРёРЅ</label>
             <input
               id="username"
               name="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              placeholder="например, roberto"
+              placeholder="РЅР°РїСЂРёРјРµСЂ, admin"
               minLength={3}
               maxLength={40}
               required
             />
-            <label htmlFor="password">Пароль</label>
+            <label htmlFor="password">РџР°СЂРѕР»СЊ</label>
             <input
               id="password"
               name="password"
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="например, admin"
+              placeholder="РЅР°РїСЂРёРјРµСЂ, admin"
               minLength={3}
               maxLength={100}
               required
             />
-            <p className="hint-text">Тестовая учетка: admin / admin</p>
+            <p className="hint-text">РўРµСЃС‚РѕРІР°СЏ СѓС‡РµС‚РєР°: admin / admin</p>
             <button type="submit" disabled={loading} className="primary-button">
-              {loading ? 'Входим...' : 'Войти'}
+              {loading ? 'Р’С…РѕРґРёРј...' : 'Р’РѕР№С‚Рё'}
             </button>
           </form>
           {error ? <p className="error-text">{error}</p> : null}
@@ -241,12 +241,12 @@ function App() {
             <h2>{sidebarTitle}</h2>
           </div>
           <button className="ghost-button" type="button" onClick={handleLogout}>
-            Выйти
+            Р’С‹Р№С‚Рё
           </button>
         </div>
 
         <button className="primary-button" type="button" onClick={handleCreateDream} disabled={submitting}>
-          Новый сон
+          РќРѕРІС‹Р№ СЃРѕРЅ
         </button>
 
         <div className="dream-list">
@@ -259,7 +259,7 @@ function App() {
             >
               <div className="dream-pill-copy">
                 <strong>{dream.title}</strong>
-                <span>{dream.keywords?.length ? dream.keywords.join(', ') : 'Ожидает анализа'}</span>
+                <span>{dream.keywords?.length ? dream.keywords.join(', ') : 'РћР¶РёРґР°РµС‚ Р°РЅР°Р»РёР·Р°'}</span>
               </div>
               <span
                 className="dream-pill-delete"
@@ -276,7 +276,7 @@ function App() {
                   }
                 }}
               >
-                ?
+                x
               </span>
             </button>
           ))}
@@ -287,8 +287,8 @@ function App() {
         <section className="chat-panel">
           <div className="chat-head">
             <div>
-              <p className="eyebrow">Текущий сон</p>
-              <h1>{activeDream?.title ?? 'Загрузка...'}</h1>
+              <p className="eyebrow">РўРµРєСѓС‰РёР№ СЃРѕРЅ</p>
+              <h1>{activeDream?.title ?? 'Р—Р°РіСЂСѓР·РєР°...'}</h1>
             </div>
             <div className={`status-badge status-${(activeDream?.stage ?? 'NEW').toLowerCase()}`}>
               {humanizeStage(activeDream?.stage)}
@@ -301,7 +301,7 @@ function App() {
                 key={message.id}
                 className={`message-card ${message.role === 'USER' ? 'message-user' : 'message-assistant'}`}
               >
-                <p className="message-role">{message.role === 'USER' ? 'Вы' : 'Ассистент'}</p>
+                <p className="message-role">{message.role === 'USER' ? 'Р’С‹' : 'РђСЃСЃРёСЃС‚РµРЅС‚'}</p>
                 <p>{message.content}</p>
                 <time>{formatDate(message.createdAt)}</time>
               </article>
@@ -309,7 +309,7 @@ function App() {
 
             {!activeDream?.messages?.length && !loading ? (
               <div className="empty-state">
-                <p>Диалог появится здесь, как только вы начнете описывать сон.</p>
+                <p>Р”РёР°Р»РѕРі РїРѕСЏРІРёС‚СЃСЏ Р·РґРµСЃСЊ, РєР°Рє С‚РѕР»СЊРєРѕ РІС‹ РЅР°С‡РЅРµС‚Рµ РѕРїРёСЃС‹РІР°С‚СЊ СЃРѕРЅ.</p>
               </div>
             ) : null}
           </div>
@@ -318,22 +318,22 @@ function App() {
             <textarea
               value={draftMessage}
               onChange={(event) => setDraftMessage(event.target.value)}
-              placeholder="Опишите сон: кто был рядом, какие символы вы запомнили, что чувствовали..."
+              placeholder="РћРїРёС€РёС‚Рµ СЃРѕРЅ: РєС‚Рѕ Р±С‹Р» СЂСЏРґРѕРј, РєР°РєРёРµ СЃРёРјРІРѕР»С‹ РІС‹ Р·Р°РїРѕРјРЅРёР»Рё, С‡С‚Рѕ С‡СѓРІСЃС‚РІРѕРІР°Р»Рё..."
               rows={4}
               disabled={loading || submitting || !activeDream}
             />
             <div className="composer-actions">
-              {error ? <p className="error-text">{error}</p> : <p className="hint-text">Пишите свободно, как в обычном чате.</p>}
+              {error ? <p className="error-text">{error}</p> : <p className="hint-text">РџРёС€РёС‚Рµ СЃРІРѕР±РѕРґРЅРѕ, РєР°Рє РІ РѕР±С‹С‡РЅРѕРј С‡Р°С‚Рµ.</p>}
               <button className="primary-button" type="submit" disabled={loading || submitting || !draftMessage.trim()}>
-                {submitting ? 'Отправляем...' : 'Отправить'}
+                {submitting ? 'РћС‚РїСЂР°РІР»СЏРµРј...' : 'РћС‚РїСЂР°РІРёС‚СЊ'}
               </button>
             </div>
           </form>
         </section>
 
         <section className="insight-panel">
-          <p className="eyebrow">Интерпретация</p>
-          <h2>Смысл сна</h2>
+          <p className="eyebrow">РРЅС‚РµСЂРїСЂРµС‚Р°С†РёСЏ</p>
+          <h2>РЎРјС‹СЃР» СЃРЅР°</h2>
 
           {activeDream?.interpretation ? (
             <>
@@ -345,12 +345,12 @@ function App() {
                 ))}
               </div>
               <p className="interpretation-text">{activeDream.interpretation}</p>
-              <p className="meta-text">Название сна: {activeDream.title}</p>
+              <p className="meta-text">РќР°Р·РІР°РЅРёРµ СЃРЅР°: {activeDream.title}</p>
             </>
           ) : (
             <div className="waiting-card">
               <p>
-                Когда ассистент соберет достаточно деталей, здесь появятся ключевые слова и итоговая интерпретация сна.
+                РљРѕРіРґР° Р°СЃСЃРёСЃС‚РµРЅС‚ СЃРѕР±РµСЂРµС‚ РґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РґРµС‚Р°Р»РµР№, Р·РґРµСЃСЊ РїРѕСЏРІСЏС‚СЃСЏ РєР»СЋС‡РµРІС‹Рµ СЃР»РѕРІР° Рё РёС‚РѕРіРѕРІР°СЏ РёРЅС‚РµСЂРїСЂРµС‚Р°С†РёСЏ СЃРЅР°.
               </p>
             </div>
           )}
@@ -377,11 +377,11 @@ function sortDreams(dreams) {
 function humanizeStage(stage) {
   switch (stage) {
     case 'CLARIFYING':
-      return 'Уточнение';
+      return 'РЈС‚РѕС‡РЅРµРЅРёРµ';
     case 'INTERPRETED':
-      return 'Интерпретирован';
+      return 'РРЅС‚РµСЂРїСЂРµС‚РёСЂРѕРІР°РЅ';
     default:
-      return 'Новый';
+      return 'РќРѕРІС‹Р№';
   }
 }
 
@@ -397,5 +397,3 @@ function formatDate(value) {
 }
 
 export default App;
-
-

@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+п»їconst API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -10,7 +10,7 @@ async function request(path, options = {}) {
   });
 
   if (!response.ok) {
-    let message = 'Не удалось выполнить запрос';
+    let message = 'РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ Р·Р°РїСЂРѕСЃ';
 
     try {
       const errorBody = await response.json();
