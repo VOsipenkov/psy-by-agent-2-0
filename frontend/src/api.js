@@ -230,11 +230,12 @@ function createInitialMockDb() {
   return db;
 }
 
-function createMockUserRecord(db, username, password) {
+function createMockUserRecord(db, username, password, email = '') {
   const user = {
     id: nextId(db, 'user'),
     username,
     password,
+    email: normalizeEmail(email),
   };
 
   db.users.push(user);
@@ -496,15 +497,41 @@ async function mockLogin(username, password) {
   return {
     id: user.id,
     username: user.username,
+    email: user.email ?? null,
     source: 'mock',
   };
 }
 
-async function mockRegister(username, password) {
+function normalizeEmail(email) {
+  const trimmedEmail = email?.trim().toLowerCase() ?? '';
+  return trimmedEmail || null;
+}
+
+function validateOptionalEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  if (normalizedEmail.length > 160) {
+    throw new Error('Email должен быть не длиннее 160 символов.');
+  }
+
+  if (!emailPattern.test(normalizedEmail)) {
+    throw new Error('Укажите корректный email.');
+  }
+
+  return normalizedEmail;
+}
+
+async function mockRegister(username, password, email) {
   await delay();
 
   const trimmedUsername = username.trim();
   const trimmedPassword = password.trim();
+  const normalizedEmail = validateOptionalEmail(email);
 
   if (trimmedUsername.length < 3 || trimmedPassword.length < 3) {
     throw new Error('Логин и пароль должны быть не короче 3 символов.');
@@ -517,12 +544,13 @@ async function mockRegister(username, password) {
     throw new Error('Пользователь с таким логином уже существует.');
   }
 
-  const user = createMockUserRecord(db, trimmedUsername, trimmedPassword);
+  const user = createMockUserRecord(db, trimmedUsername, trimmedPassword, normalizedEmail);
   writeMockDb(db);
 
   return {
     id: user.id,
     username: user.username,
+    email: user.email ?? null,
     source: 'mock',
   };
 }
@@ -593,13 +621,13 @@ export function loginUser(username, password) {
   );
 }
 
-export function registerUser(username, password) {
+export function registerUser(username, password, email) {
   return withFallback(
     () => request('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, email: normalizeEmail(email) }),
     }),
-    () => mockRegister(username, password),
+    () => mockRegister(username, password, email),
   );
 }
 

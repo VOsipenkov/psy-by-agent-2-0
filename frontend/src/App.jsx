@@ -21,6 +21,7 @@ function App() {
   const [activeDream, setActiveDream] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [draftMessage, setDraftMessage] = useState('');
@@ -160,8 +161,9 @@ function App() {
         throw new Error('Пароли не совпадают');
       }
 
-      const authAction = authMode === 'register' ? registerUser : loginUser;
-      const authenticatedUser = await authAction(username.trim(), password.trim());
+      const authenticatedUser = authMode === 'register'
+        ? await registerUser(username.trim(), password.trim(), email.trim())
+        : await loginUser(username.trim(), password.trim());
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(authenticatedUser));
       setUser(authenticatedUser);
     } catch (apiError) {
@@ -471,6 +473,7 @@ function App() {
                 onClick={() => {
                   setAuthMode('login');
                   setError('');
+                  setEmail('');
                   setConfirmPassword('');
                 }}
               >
@@ -499,6 +502,22 @@ function App() {
               maxLength={40}
               required
             />
+
+            {authMode === 'register' ? (
+              <>
+                <label htmlFor="email">Email для рассылки (необязательно)</label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="name@example.com"
+                  maxLength={160}
+                  autoComplete="email"
+                />
+              </>
+            ) : null}
 
             <label htmlFor="password">Пароль</label>
             <input

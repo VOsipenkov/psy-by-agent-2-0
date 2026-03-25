@@ -23,20 +23,21 @@ public class AuthService {
             .map(existing -> loginExistingUser(existing, password))
             .orElseThrow(() -> new IllegalArgumentException("ѕользователь с таким логином не найден"));
 
-        return new LoginResponse(userAccount.getId(), userAccount.getUsername());
+        return toLoginResponse(userAccount);
     }
 
     @Transactional
-    public LoginResponse register(LoginRequest request) {
+    public LoginResponse register(RegisterRequest request) {
         String username = normalizeUsername(request.username());
         String password = request.password().trim();
+        String email = normalizeEmail(request.email());
 
         if (userAccountRepository.findByUsernameIgnoreCase(username).isPresent()) {
             throw new IllegalArgumentException("ѕользователь с таким логином уже существует");
         }
 
-        UserAccount userAccount = registerUser(username, password);
-        return new LoginResponse(userAccount.getId(), userAccount.getUsername());
+        UserAccount userAccount = registerUser(username, password, email);
+        return toLoginResponse(userAccount);
     }
 
     private UserAccount loginExistingUser(UserAccount userAccount, String password) {
@@ -52,14 +53,28 @@ public class AuthService {
         return userAccount;
     }
 
-    private UserAccount registerUser(String username, String password) {
+    private UserAccount registerUser(String username, String password, String email) {
         UserAccount created = new UserAccount();
         created.setUsername(username);
+        created.setEmail(email);
         created.setPasswordHash(passwordEncoder.encode(password));
         return userAccountRepository.save(created);
     }
 
     private String normalizeUsername(String rawUsername) {
         return rawUsername == null ? "" : rawUsername.trim();
+    }
+
+    private String normalizeEmail(String rawEmail) {
+        if (rawEmail == null) {
+            return null;
+        }
+
+        String normalizedEmail = rawEmail.trim().toLowerCase();
+        return normalizedEmail.isEmpty() ? null : normalizedEmail;
+    }
+
+    private LoginResponse toLoginResponse(UserAccount userAccount) {
+        return new LoginResponse(userAccount.getId(), userAccount.getUsername(), userAccount.getEmail());
     }
 }
