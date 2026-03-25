@@ -25,7 +25,9 @@ function App() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [draftMessage, setDraftMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [creatingDream, setCreatingDream] = useState(false);
+  const [deletingDream, setDeletingDream] = useState(false);
+  const [pendingDreamIds, setPendingDreamIds] = useState([]);
   const [error, setError] = useState('');
   const [dreamToDelete, setDreamToDelete] = useState(null);
   const [isMockMode, setIsMockMode] = useState(() => isMockApiEnabled());
@@ -35,11 +37,13 @@ function App() {
   const [dragOverDreamId, setDragOverDreamId] = useState(null);
   const timelineEndRef = useRef(null);
   const profileImageInputRef = useRef(null);
+  const activeDreamIdRef = useRef(activeDream?.id ?? null);
 
   const orderedDreams = useMemo(
     () => applyDreamOrder(dreams, customDreamOrder),
     [dreams, customDreamOrder],
   );
+  const activeDreamPending = activeDream?.id ? pendingDreamIds.includes(activeDream.id) : false;
 
   useEffect(() => {
     if (!user?.id) {
@@ -48,6 +52,10 @@ function App() {
 
     void bootstrapUser(user);
   }, [user?.id]);
+
+  useEffect(() => {
+    activeDreamIdRef.current = activeDream?.id ?? null;
+  }, [activeDream?.id]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -97,6 +105,18 @@ function App() {
 
   function syncApiMode() {
     setIsMockMode(isMockApiEnabled());
+  }
+
+  function isDreamPending(dreamId) {
+    return dreamId ? pendingDreamIds.includes(dreamId) : false;
+  }
+
+  function markDreamPending(dreamId) {
+    setPendingDreamIds((current) => (current.includes(dreamId) ? current : [...current, dreamId]));
+  }
+
+  function clearDreamPending(dreamId) {
+    setPendingDreamIds((current) => current.filter((itemId) => itemId !== dreamId));
   }
 
   async function bootstrapUser(currentUser) {
@@ -164,6 +184,9 @@ function App() {
     setCustomDreamOrder([]);
     setDraggedDreamId(null);
     setDragOverDreamId(null);
+    setPendingDreamIds([]);
+    setCreatingDream(false);
+    setDeletingDream(false);
   }
 
   async function handleSelectDream(dreamId) {
@@ -190,7 +213,7 @@ function App() {
       return;
     }
 
-    setSubmitting(true);
+    setCreatingDream(true);
     setError('');
 
     try {
@@ -205,7 +228,7 @@ function App() {
       setError(apiError.message);
     } finally {
       syncApiMode();
-      setSubmitting(false);
+      setCreatingDream(false);
     }
   }
 
@@ -214,19 +237,26 @@ function App() {
       return;
     }
 
-    setSubmitting(true);
+    const dreamId = activeDream.id;
+    const outgoingMessage = draftMessage.trim();
+
+    markDreamPending(dreamId);
     setError('');
+    setDraftMessage('');
 
     try {
-      const updated = await sendDreamMessage(user.id, activeDream.id, draftMessage.trim());
-      setActiveDream(updated);
+      const updated = await sendDreamMessage(user.id, dreamId, outgoingMessage);
       setDreams((current) => sortDreams([toSummary(updated), ...current.filter((item) => item.id !== updated.id)]));
-      setDraftMessage('');
+      setActiveDream((current) => (current?.id === updated.id ? updated : current));
     } catch (apiError) {
       setError(apiError.message);
+
+      if (activeDreamIdRef.current === dreamId) {
+        setDraftMessage((current) => current || outgoingMessage);
+      }
     } finally {
       syncApiMode();
-      setSubmitting(false);
+      clearDreamPending(dreamId);
     }
   }
 
@@ -242,7 +272,7 @@ function App() {
 
     event.preventDefault();
 
-    if (!loading && !submitting && draftMessage.trim()) {
+    if (!loading && !activeDreamPending && draftMessage.trim()) {
       void submitCurrentMessage();
     }
   }
@@ -264,7 +294,7 @@ function App() {
 
     const dreamId = dreamToDelete.id;
     const nextOrder = customDreamOrder.filter((itemId) => itemId !== dreamId);
-    setSubmitting(true);
+    setDeletingDream(true);
     setError('');
 
     try {
@@ -293,7 +323,7 @@ function App() {
       setError(apiError.message);
     } finally {
       syncApiMode();
-      setSubmitting(false);
+      setDeletingDream(false);
       setDreamToDelete(null);
     }
   }
@@ -582,7 +612,12 @@ function App() {
                         ⋮⋮
                       </span>
                       <strong>{dream.title}</strong>
-                      <span>{humanizeStage(dream.stage)}</span>
+                      <div className="dream-card-meta">
+                        {isDreamPending(dream.id) ? (
+                          <span className="dream-card-spinner" aria-label="Waiting for assistant response" title="Waiting for assistant response" />
+                        ) : null}
+                        <span>{humanizeStage(dream.stage)}</span>
+                      </div>
                     </div>
                     <p>{dream.keywords?.length ? dream.keywords.join(' • ') : 'Ассистент еще собирает детали'}</p>
                     <time>{formatDate(dream.updatedAt) || 'Только что'}</time>
@@ -592,6 +627,7 @@ function App() {
                     type="button"
                     aria-label={`Удалить сон ${dream.title}`}
                     onClick={() => requestDeleteDream(dream.id)}
+                    disabled={isDreamPending(dream.id) || deletingDream}
                   >
                     ×
                   </button>
@@ -600,7 +636,7 @@ function App() {
             </div>
 
             <div className="sidebar-actions">
-              <button className="primary-button new-dream-button" type="button" onClick={handleCreateDream} disabled={submitting}>
+              <button className="primary-button new-dream-button" type="button" onClick={handleCreateDream} disabled={creatingDream || deletingDream}>
                 Новый сон
               </button>
             </div>
@@ -620,6 +656,7 @@ function App() {
                     {humanizeStage(activeDream?.stage)}
                   </div>
                   {loading ? <span className="inline-status">Обновляем...</span> : null}
+                  {!loading && activeDreamPending ? <span className="inline-status">Ассистент думает...</span> : null}
                 </div>
               </div>
 
@@ -657,7 +694,7 @@ function App() {
                   onKeyDown={handleComposerKeyDown}
                   placeholder="Опишите сон: кто был рядом, какие символы запомнились, что чувствовали..."
                   rows={5}
-                  disabled={loading || submitting || !activeDream}
+                  disabled={loading || activeDreamPending || !activeDream}
                 />
                 <div className="composer-actions">
                   {error ? (
@@ -665,8 +702,8 @@ function App() {
                   ) : (
                     <p className="hint-text">Enter отправляет сообщение, Shift+Enter переносит строку.</p>
                   )}
-                  <button className="primary-button" type="submit" disabled={loading || submitting || !draftMessage.trim()}>
-                    {submitting ? 'Отправляем...' : 'Отправить'}
+                  <button className="primary-button" type="submit" disabled={loading || activeDreamPending || !draftMessage.trim()}>
+                    {activeDreamPending ? 'Ожидаем ответ...' : 'Отправить'}
                   </button>
                 </div>
               </form>
@@ -757,11 +794,11 @@ function App() {
               Сон <strong>{dreamToDelete.title}</strong> будет удален вместе со всей перепиской. Это действие нельзя отменить.
             </p>
             <div className="modal-actions">
-              <button className="ghost-button" type="button" onClick={() => setDreamToDelete(null)} disabled={submitting}>
+              <button className="ghost-button" type="button" onClick={() => setDreamToDelete(null)} disabled={deletingDream}>
                 Отмена
               </button>
-              <button className="danger-button" type="button" onClick={() => void confirmDeleteDream()} disabled={submitting}>
-                {submitting ? 'Удаляем...' : 'Подтвердить'}
+              <button className="danger-button" type="button" onClick={() => void confirmDeleteDream()} disabled={deletingDream}>
+                {deletingDream ? 'Удаляем...' : 'Подтвердить'}
               </button>
             </div>
           </div>
