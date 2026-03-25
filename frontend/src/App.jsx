@@ -243,11 +243,8 @@ function App() {
       return 'Dream Journal';
     }
 
-    return `${user.username}, ваши сны`;
+    return user.username;
   }, [user]);
-
-  const messageCount = activeDream?.messages?.length ?? 0;
-  const keywordCount = activeDream?.keywords?.length ?? 0;
 
   if (!user) {
     return (
@@ -336,25 +333,19 @@ function App() {
             <div>
               <p className="eyebrow">Dream Journal</p>
               <h2>{sidebarTitle}</h2>
-              <p className="sidebar-copy">Слева вся история, справа живой разбор текущего сна.</p>
+              <p className="sidebar-copy">Личный дневник снов и история прошлых интерпретаций.</p>
             </div>
-          </div>
-
-          <div className="sidebar-actions">
-            <button className="primary-button new-dream-button" type="button" onClick={handleCreateDream} disabled={submitting}>
-              Новый сон
-            </button>
-            <button className="ghost-button" type="button" onClick={handleLogout}>
+            <button className="ghost-button sidebar-logout" type="button" onClick={handleLogout}>
               Выйти
             </button>
           </div>
 
-          {isMockMode ? <div className="mock-banner">Локальный демо-режим: интерфейс работает без backend и Docker.</div> : null}
-
           <div className="sidebar-section-head">
-            <span>История снов</span>
+            <span>Предыдущие сны</span>
             <span>{dreams.length}</span>
           </div>
+
+          {isMockMode ? <div className="mock-banner">Локальный демо-режим: интерфейс работает без backend и Docker.</div> : null}
 
           <div className="dream-list">
             {dreams.map((dream) => (
@@ -378,45 +369,28 @@ function App() {
               </article>
             ))}
           </div>
+
+          <div className="sidebar-actions">
+            <button className="primary-button new-dream-button" type="button" onClick={handleCreateDream} disabled={submitting}>
+              Новый сон
+            </button>
+          </div>
         </aside>
 
         <main className="workspace">
-          <section className="workspace-hero">
-            <div className="workspace-hero-copy">
-              <p className="eyebrow">Активная беседа</p>
-              <h1>{activeDream?.title ?? 'Подготавливаем новый сон'}</h1>
-              <p className="hero-text">{describeStage(activeDream?.stage)}</p>
-            </div>
-
-            <div className="workspace-hero-side">
-              <div className={`status-badge status-${(activeDream?.stage ?? 'NEW').toLowerCase()}`}>
-                {humanizeStage(activeDream?.stage)}
-              </div>
-              <div className="hero-metrics">
-                <article className="metric-card">
-                  <span>Сообщений</span>
-                  <strong>{messageCount}</strong>
-                </article>
-                <article className="metric-card">
-                  <span>Ключевых образов</span>
-                  <strong>{keywordCount}</strong>
-                </article>
-                <article className="metric-card">
-                  <span>Обновлено</span>
-                  <strong>{formatDate(activeDream?.updatedAt) || 'Сейчас'}</strong>
-                </article>
-              </div>
-            </div>
-          </section>
-
           <div className="workspace-grid">
             <section className="chat-panel">
               <div className="section-head">
                 <div>
-                  <p className="eyebrow">Чат</p>
-                  <h2>Лента разговора</h2>
+                  <p className="eyebrow">Текущий сон</p>
+                  <h2>{activeDream?.title ?? 'Подготавливаем новый сон'}</h2>
                 </div>
-                {loading ? <span className="inline-status">Обновляем...</span> : null}
+                <div className="section-head-side">
+                  <div className={`status-badge status-${(activeDream?.stage ?? 'NEW').toLowerCase()}`}>
+                    {humanizeStage(activeDream?.stage)}
+                  </div>
+                  {loading ? <span className="inline-status">Обновляем...</span> : null}
+                </div>
               </div>
 
               <div className="chat-timeline">
@@ -589,17 +563,6 @@ function humanizeStage(stage) {
       return 'Интерпретация готова';
     default:
       return 'Новый сон';
-  }
-}
-
-function describeStage(stage) {
-  switch (stage) {
-    case 'CLARIFYING':
-      return 'Ассистент уже уточняет детали и собирает главные символы сна.';
-    case 'INTERPRETED':
-      return 'Интерпретация уже собрана: можно перечитать беседу и итоговый разбор справа.';
-    default:
-      return 'Опишите сон свободно внизу, и ассистент сам поведет беседу дальше.';
   }
 }
 

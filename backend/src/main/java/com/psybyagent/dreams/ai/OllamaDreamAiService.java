@@ -34,6 +34,7 @@ public class OllamaDreamAiService implements DreamAiService {
     private final RestClient ollamaRestClient;
     private final ObjectMapper objectMapper;
     private final OllamaProperties ollamaProperties;
+    private final DreamInterpretationRagService dreamInterpretationRagService;
 
     @Override
     public DreamAiResult generateReply(DreamConversation conversation) {
@@ -68,13 +69,16 @@ public class OllamaDreamAiService implements DreamAiService {
             String interpretation = StringUtils.hasText(payload.interpretation())
                 ? payload.interpretation().trim()
                 : payload.assistantMessage().trim();
+            String assistantMessage = StringUtils.hasText(payload.assistantMessage())
+                ? payload.assistantMessage().trim()
+                : interpretation;
             String title = StringUtils.hasText(payload.title())
                 ? payload.title().trim()
                 : buildTitleFromKeywords(keywords);
 
             return new DreamAiResult(
                 stage,
-                interpretation,
+                assistantMessage,
                 title,
                 keywords,
                 interpretation
@@ -128,31 +132,48 @@ public class OllamaDreamAiService implements DreamAiService {
     }
 
     private String buildPrompt(DreamConversation conversation) {
+        String ragContext = dreamInterpretationRagService.buildContext(conversation);
         StringBuilder builder = new StringBuilder();
         builder.append("""
-            Ты - русскоязычный ассистент по анализу снов.
-            Работай по мотивам сонника Миллера, но без цитирования книги.
-            Тебе нужно прочитать историю диалога и вернуть только JSON без markdown.
+            You are a Russian-speaking psychotherapist who specializes in dream interpretation.
+            Your task is not generic chat. Your task is to interpret dreams with professional care.
+            Your main lenses are:
+            - Miller-inspired symbolic dream reading
+            - Jungian psychology
+            - Freudian dream analysis
+            - Gestalt dream work
 
-            Формат ответа:
+            Use the retrieved knowledge context below as domain guidance.
+            Stay focused on dream symbols, emotions, relationships, conflicts, endings, and links to the dreamer's present life.
+            Be warm, careful, and non-dogmatic.
+            Present meanings as hypotheses, not as absolute truth.
+            Do not diagnose psychiatric disorders and do not write medical conclusions.
+            Always answer in Russian.
+            Return valid JSON only, without markdown and without any extra text.
+
+            Response schema:
             {
               \"stage\": \"CLARIFYING\" | \"INTERPRETED\",
-              \"assistantMessage\": \"строка\",
-              \"title\": \"1-2 слова\",
-              \"keywords\": [\"слово1\", \"слово2\", \"слово3\"],
-              \"interpretation\": \"строка\"
+              \"assistantMessage\": \"string\",
+              \"title\": \"1-2 words\",
+              \"keywords\": [\"keyword1\", \"keyword2\", \"keyword3\"],
+              \"interpretation\": \"string\"
             }
 
-            Правила:
-            1. Если данных недостаточно, верни stage=CLARIFYING и задай 1 вопрос.
-            2. Если данных достаточно, верни stage=INTERPRETED.
-            3. При INTERPRETED title обязан быть из 1-2 слов.
-            4. При INTERPRETED выдели 2-3 ключевых слова.
-            5. При INTERPRETED interpretation должна быть понятной, мягкой и на русском.
-            6. Никакого текста вне JSON.
+            Decision rules:
+            1. If details are still insufficient, return stage=CLARIFYING and ask exactly one focused follow-up question.
+            2. Good follow-up questions ask about emotion, strongest symbol, ending of the dream, meaningful person, repetition, or bodily feeling.
+            3. If there is enough material, return stage=INTERPRETED.
+            4. For stage=INTERPRETED, title must contain 1-2 words.
+            5. For stage=INTERPRETED, extract 2-3 keywords from the dream itself.
+            6. For stage=INTERPRETED, assistantMessage should be a short conversational lead-in, and interpretation should be the fuller final reading.
+            7. interpretation must synthesize symbols and emotions, with Miller as the main frame and Jung/Freud/Gestalt as supporting lenses when relevant.
+            8. No text outside JSON.
 
-            История чата:
+            Retrieved knowledge context:
             """);
+        builder.append(ragContext).append("\n\n");
+        builder.append("Chat history:\n");
 
         conversation.getMessages().stream()
             .sorted(Comparator.comparing(DreamMessage::getCreatedAt))
