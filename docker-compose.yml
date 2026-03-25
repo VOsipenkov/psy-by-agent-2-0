@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: dream
       POSTGRES_PASSWORD: dream
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -31,14 +31,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      ollama:
-        condition: service_started
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dreams
       SPRING_DATASOURCE_USERNAME: dream
       SPRING_DATASOURCE_PASSWORD: dream
-      APP_OLLAMA_BASE_URL: http://ollama:11434
-      APP_OLLAMA_MODEL: llama3.1:8b
+      APP_OLLAMA_BASE_URL: ${APP_OLLAMA_BASE_URL:-http://ollama:11434}
+      APP_OLLAMA_MODEL: ${APP_OLLAMA_MODEL:-llama3.1:8b}
     ports:
       - "8080:8080"
 
@@ -54,3 +52,6 @@ services:
 volumes:
   postgres_data:
   ollama_data:
+
+
+

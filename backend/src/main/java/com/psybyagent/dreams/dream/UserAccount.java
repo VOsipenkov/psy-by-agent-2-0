@@ -17,4 +17,7 @@ public class UserAccount extends AuditableEntity {
 
     @Column(nullable = false, unique = true, length = 40)
     private String username;
+
+    @Column(length = 100)
+    private String passwordHash;
 }

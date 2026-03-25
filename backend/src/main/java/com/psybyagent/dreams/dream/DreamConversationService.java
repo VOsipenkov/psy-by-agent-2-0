@@ -40,7 +40,7 @@ public class DreamConversationService {
         conversation.setStage(DreamStage.NEW);
         conversation.addMessage(DreamMessage.assistant(WELCOME_MESSAGE));
 
-        DreamConversation saved = dreamConversationRepository.save(conversation);
+        DreamConversation saved = dreamConversationRepository.saveAndFlush(conversation);
         return toDetail(saved);
     }
 
@@ -54,6 +54,7 @@ public class DreamConversationService {
         DreamConversation conversation = getConversationEntity(userId, dreamId);
         conversation.addMessage(DreamMessage.user(request.content().trim()));
         conversation.setStage(conversation.getStage() == DreamStage.NEW ? DreamStage.CLARIFYING : conversation.getStage());
+        conversation = dreamConversationRepository.saveAndFlush(conversation);
 
         DreamAiResult aiResult = dreamAiService.generateReply(conversation);
 
@@ -68,7 +69,7 @@ public class DreamConversationService {
         }
 
         conversation.addMessage(DreamMessage.assistant(aiResult.assistantMessage()));
-        DreamConversation saved = dreamConversationRepository.save(conversation);
+        DreamConversation saved = dreamConversationRepository.saveAndFlush(conversation);
         return toDetail(saved);
     }
 
@@ -120,3 +121,4 @@ public class DreamConversationService {
         );
     }
 }
+

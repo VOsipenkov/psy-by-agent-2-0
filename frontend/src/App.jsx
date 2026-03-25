@@ -17,7 +17,8 @@ function App() {
   });
   const [dreams, setDreams] = useState([]);
   const [activeDream, setActiveDream] = useState(null);
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('admin');
   const [draftMessage, setDraftMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -61,10 +62,9 @@ function App() {
     setError('');
 
     try {
-      const loggedInUser = await loginUser(username.trim());
+      const loggedInUser = await loginUser(username.trim(), password.trim());
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(loggedInUser));
       setUser(loggedInUser);
-      setUsername('');
     } catch (apiError) {
       setError(apiError.message);
     } finally {
@@ -209,6 +209,19 @@ function App() {
               maxLength={40}
               required
             />
+            <label htmlFor="password">Пароль</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="например, admin"
+              minLength={3}
+              maxLength={100}
+              required
+            />
+            <p className="hint-text">Тестовая учетка: admin / admin</p>
             <button type="submit" disabled={loading} className="primary-button">
               {loading ? 'Входим...' : 'Войти'}
             </button>
@@ -384,4 +397,5 @@ function formatDate(value) {
 }
 
 export default App;
+
 

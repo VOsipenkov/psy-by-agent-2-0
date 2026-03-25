@@ -29,10 +29,10 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-export function loginUser(username) {
+export function loginUser(username, password) {
   return request('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ username, password }),
   });
 }
 
