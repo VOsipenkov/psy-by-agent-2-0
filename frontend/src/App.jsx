@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createDream,
   deleteDream,
@@ -11,12 +11,12 @@ import {
 } from './api';
 
 const STORAGE_KEY = 'dream-journal-user';
+const AVATAR_STORAGE_KEY_PREFIX = 'dream-journal-avatar';
+const DREAM_ORDER_STORAGE_KEY_PREFIX = 'dream-journal-order';
+const MAX_PROFILE_IMAGE_SIZE = 5 * 1024 * 1024;
 
 function App() {
-  const [user, setUser] = useState(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState(() => readStoredUser());
   const [dreams, setDreams] = useState([]);
   const [activeDream, setActiveDream] = useState(null);
   const [authMode, setAuthMode] = useState('login');
@@ -29,7 +29,17 @@ function App() {
   const [error, setError] = useState('');
   const [dreamToDelete, setDreamToDelete] = useState(null);
   const [isMockMode, setIsMockMode] = useState(() => isMockApiEnabled());
+  const [profileImage, setProfileImage] = useState(() => readProfileImage(readStoredUser()?.id));
+  const [customDreamOrder, setCustomDreamOrder] = useState(() => readDreamOrder(readStoredUser()?.id));
+  const [draggedDreamId, setDraggedDreamId] = useState(null);
+  const [dragOverDreamId, setDragOverDreamId] = useState(null);
   const timelineEndRef = useRef(null);
+  const profileImageInputRef = useRef(null);
+
+  const orderedDreams = useMemo(
+    () => applyDreamOrder(dreams, customDreamOrder),
+    [dreams, customDreamOrder],
+  );
 
   useEffect(() => {
     if (!user?.id) {
@@ -38,6 +48,30 @@ function App() {
 
     void bootstrapUser(user);
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setProfileImage('');
+      setCustomDreamOrder([]);
+      return;
+    }
+
+    setProfileImage(readProfileImage(user.id));
+    setCustomDreamOrder(readDreamOrder(user.id));
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    if (customDreamOrder.length > 0) {
+      writeDreamOrder(user.id, customDreamOrder);
+      return;
+    }
+
+    clearDreamOrder(user.id);
+  }, [customDreamOrder, user?.id]);
 
   useEffect(() => {
     timelineEndRef.current?.scrollIntoView({
@@ -70,17 +104,23 @@ function App() {
     setError('');
 
     try {
-      const list = sortDreams(await fetchDreams(currentUser.id));
-      setDreams(list);
+      const fetchedDreams = sortDreams(await fetchDreams(currentUser.id));
+      const storedOrder = sanitizeDreamOrder(fetchedDreams, readDreamOrder(currentUser.id));
+      const displayDreams = applyDreamOrder(fetchedDreams, storedOrder);
 
-      if (list.length === 0) {
+      setCustomDreamOrder(storedOrder);
+      setDreams(fetchedDreams);
+
+      if (displayDreams.length === 0) {
+        clearDreamOrder(currentUser.id);
         const created = await createDream(currentUser.id);
         setActiveDream(created);
         setDreams([toSummary(created)]);
+        setCustomDreamOrder([]);
         return;
       }
 
-      const detail = await fetchDream(currentUser.id, list[0].id);
+      const detail = await fetchDream(currentUser.id, displayDreams[0].id);
       setActiveDream(detail);
     } catch (apiError) {
       setError(apiError.message);
@@ -120,6 +160,10 @@ function App() {
     setDraftMessage('');
     setDreamToDelete(null);
     setError('');
+    setProfileImage('');
+    setCustomDreamOrder([]);
+    setDraggedDreamId(null);
+    setDragOverDreamId(null);
   }
 
   async function handleSelectDream(dreamId) {
@@ -153,6 +197,9 @@ function App() {
       const created = await createDream(user.id);
       setActiveDream(created);
       setDreams((current) => sortDreams([toSummary(created), ...current]));
+      setCustomDreamOrder((current) => (
+        current.length > 0 ? [created.id, ...current.filter((dreamId) => dreamId !== created.id)] : current
+      ));
       setDraftMessage('');
     } catch (apiError) {
       setError(apiError.message);
@@ -201,7 +248,7 @@ function App() {
   }
 
   function requestDeleteDream(dreamId) {
-    const target = dreams.find((dream) => dream.id === dreamId);
+    const target = orderedDreams.find((dream) => dream.id === dreamId);
 
     if (!target) {
       return;
@@ -216,6 +263,7 @@ function App() {
     }
 
     const dreamId = dreamToDelete.id;
+    const nextOrder = customDreamOrder.filter((itemId) => itemId !== dreamId);
     setSubmitting(true);
     setError('');
 
@@ -223,19 +271,23 @@ function App() {
       await deleteDream(user.id, dreamId);
 
       const nextDreams = dreams.filter((dream) => dream.id !== dreamId);
+      const nextDisplayedDreams = applyDreamOrder(nextDreams, nextOrder);
+
+      setCustomDreamOrder(nextOrder);
       setDreams(nextDreams);
 
       if (activeDream?.id !== dreamId) {
         return;
       }
 
-      if (nextDreams.length > 0) {
-        const detail = await fetchDream(user.id, nextDreams[0].id);
+      if (nextDisplayedDreams.length > 0) {
+        const detail = await fetchDream(user.id, nextDisplayedDreams[0].id);
         setActiveDream(detail);
       } else {
         const created = await createDream(user.id);
         setActiveDream(created);
         setDreams([toSummary(created)]);
+        setCustomDreamOrder([]);
       }
     } catch (apiError) {
       setError(apiError.message);
@@ -244,6 +296,99 @@ function App() {
       setSubmitting(false);
       setDreamToDelete(null);
     }
+  }
+
+  function handleDreamDragStart(event, dreamId) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', dreamId);
+    setDraggedDreamId(dreamId);
+    setDragOverDreamId(dreamId);
+  }
+
+  function handleDreamDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }
+
+  function handleDreamDragEnter(event, dreamId) {
+    event.preventDefault();
+
+    if (!draggedDreamId || draggedDreamId === dreamId) {
+      return;
+    }
+
+    setDragOverDreamId(dreamId);
+  }
+
+  function handleDreamDrop(event, targetDreamId) {
+    event.preventDefault();
+
+    const sourceDreamId = draggedDreamId ?? event.dataTransfer.getData('text/plain');
+
+    if (!sourceDreamId || sourceDreamId === targetDreamId) {
+      setDraggedDreamId(null);
+      setDragOverDreamId(null);
+      return;
+    }
+
+    const reorderedIds = reorderDreamIds(
+      orderedDreams.map((dream) => dream.id),
+      sourceDreamId,
+      targetDreamId,
+    );
+
+    setCustomDreamOrder(reorderedIds);
+    setDraggedDreamId(null);
+    setDragOverDreamId(null);
+  }
+
+  function handleDreamDragEnd() {
+    setDraggedDreamId(null);
+    setDragOverDreamId(null);
+  }
+
+  function openProfileImageDialog() {
+    profileImageInputRef.current?.click();
+  }
+
+  function handleProfileImageChange(event) {
+    const file = event.target.files?.[0];
+
+    if (!file || !user?.id) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setError('Можно загрузить только изображение.');
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > MAX_PROFILE_IMAGE_SIZE) {
+      setError('Фото должно быть меньше 5 МБ.');
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        setError('Не удалось прочитать изображение.');
+        return;
+      }
+
+      writeProfileImage(user.id, reader.result);
+      setProfileImage(reader.result);
+      setError('');
+    };
+
+    reader.onerror = () => {
+      setError('Не удалось загрузить изображение.');
+    };
+
+    reader.readAsDataURL(file);
+    event.target.value = '';
   }
 
   const sidebarTitle = useMemo(() => {
@@ -373,7 +518,23 @@ function App() {
       <div className="app-shell">
         <aside className="sidebar">
           <div className="sidebar-top">
-            <div className="profile-badge">{user.username.slice(0, 1).toUpperCase()}</div>
+            <button
+              className="profile-badge profile-badge-button"
+              type="button"
+              onClick={openProfileImageDialog}
+              aria-label="Загрузить фото профиля"
+              title="Загрузить фото профиля"
+            >
+              {profileImage ? (
+                <img
+                  className="profile-avatar-image"
+                  src={profileImage}
+                  alt={`Фото пользователя ${user.username}`}
+                />
+              ) : (
+                user.username.slice(0, 1).toUpperCase()
+              )}
+            </button>
             <div>
               <p className="eyebrow">Dream Journal</p>
               <h2>{sidebarTitle}</h2>
@@ -381,42 +542,68 @@ function App() {
             <button className="ghost-button sidebar-logout" type="button" onClick={handleLogout}>
               Выйти
             </button>
+            <input
+              ref={profileImageInputRef}
+              className="visually-hidden-input"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={handleProfileImageChange}
+            />
           </div>
 
           <div className="sidebar-section-head">
             <span>Предыдущие сны</span>
-            <span>{dreams.length}</span>
+            <span>{orderedDreams.length}</span>
           </div>
 
           {isMockMode ? <div className="mock-banner">Локальный демо-режим: интерфейс работает без backend и Docker.</div> : null}
 
-          <div className="dream-list">
-            {dreams.map((dream) => (
-              <article key={dream.id} className={`dream-card ${activeDream?.id === dream.id ? 'is-active' : ''}`}>
-                <button className="dream-card-main" type="button" onClick={() => handleSelectDream(dream.id)}>
-                  <div className="dream-card-head">
-                    <strong>{dream.title}</strong>
-                    <span>{humanizeStage(dream.stage)}</span>
-                  </div>
-                  <p>{dream.keywords?.length ? dream.keywords.join(' • ') : 'Ассистент еще собирает детали'}</p>
-                  <time>{formatDate(dream.updatedAt) || 'Только что'}</time>
-                </button>
-                <button
-                  className="dream-card-delete"
-                  type="button"
-                  aria-label={`Удалить сон ${dream.title}`}
-                  onClick={() => requestDeleteDream(dream.id)}
+          <div className="sidebar-dreams-section">
+            <div className="dream-list">
+              {orderedDreams.map((dream) => (
+                <article
+                  key={dream.id}
+                  className={[
+                    'dream-card',
+                    activeDream?.id === dream.id ? 'is-active' : '',
+                    draggedDreamId === dream.id ? 'is-dragging' : '',
+                    dragOverDreamId === dream.id && draggedDreamId !== dream.id ? 'is-drop-target' : '',
+                  ].filter(Boolean).join(' ')}
+                  draggable
+                  onDragStart={(event) => handleDreamDragStart(event, dream.id)}
+                  onDragOver={handleDreamDragOver}
+                  onDragEnter={(event) => handleDreamDragEnter(event, dream.id)}
+                  onDrop={(event) => handleDreamDrop(event, dream.id)}
+                  onDragEnd={handleDreamDragEnd}
                 >
-                  ×
-                </button>
-              </article>
-            ))}
-          </div>
+                  <button className="dream-card-main" type="button" onClick={() => handleSelectDream(dream.id)}>
+                    <div className="dream-card-head">
+                      <span className="dream-card-grip" aria-hidden="true">
+                        ⋮⋮
+                      </span>
+                      <strong>{dream.title}</strong>
+                      <span>{humanizeStage(dream.stage)}</span>
+                    </div>
+                    <p>{dream.keywords?.length ? dream.keywords.join(' • ') : 'Ассистент еще собирает детали'}</p>
+                    <time>{formatDate(dream.updatedAt) || 'Только что'}</time>
+                  </button>
+                  <button
+                    className="dream-card-delete"
+                    type="button"
+                    aria-label={`Удалить сон ${dream.title}`}
+                    onClick={() => requestDeleteDream(dream.id)}
+                  >
+                    ×
+                  </button>
+                </article>
+              ))}
+            </div>
 
-          <div className="sidebar-actions">
-            <button className="primary-button new-dream-button" type="button" onClick={handleCreateDream} disabled={submitting}>
-              Новый сон
-            </button>
+            <div className="sidebar-actions">
+              <button className="primary-button new-dream-button" type="button" onClick={handleCreateDream} disabled={submitting}>
+                Новый сон
+              </button>
+            </div>
           </div>
         </aside>
 
@@ -584,6 +771,70 @@ function App() {
   );
 }
 
+function readStoredUser() {
+  const saved = window.localStorage.getItem(STORAGE_KEY);
+  return saved ? JSON.parse(saved) : null;
+}
+
+function readProfileImage(userId) {
+  if (!userId) {
+    return '';
+  }
+
+  return window.localStorage.getItem(getAvatarStorageKey(userId)) ?? '';
+}
+
+function writeProfileImage(userId, imageData) {
+  if (!userId) {
+    return;
+  }
+
+  window.localStorage.setItem(getAvatarStorageKey(userId), imageData);
+}
+
+function readDreamOrder(userId) {
+  if (!userId) {
+    return [];
+  }
+
+  const saved = window.localStorage.getItem(getDreamOrderStorageKey(userId));
+
+  if (!saved) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDreamOrder(userId, order) {
+  if (!userId) {
+    return;
+  }
+
+  window.localStorage.setItem(getDreamOrderStorageKey(userId), JSON.stringify(order));
+}
+
+function clearDreamOrder(userId) {
+  if (!userId) {
+    return;
+  }
+
+  window.localStorage.removeItem(getDreamOrderStorageKey(userId));
+}
+
+function getAvatarStorageKey(userId) {
+  return `${AVATAR_STORAGE_KEY_PREFIX}-${userId}`;
+}
+
+function getDreamOrderStorageKey(userId) {
+  return `${DREAM_ORDER_STORAGE_KEY_PREFIX}-${userId}`;
+}
+
 function toSummary(dream) {
   return {
     id: dream.id,
@@ -596,6 +847,37 @@ function toSummary(dream) {
 
 function sortDreams(dreams) {
   return [...dreams].sort((left, right) => new Date(right.updatedAt) - new Date(left.updatedAt));
+}
+
+function sanitizeDreamOrder(dreams, order) {
+  const availableIds = new Set(dreams.map((dream) => dream.id));
+  return order.filter((dreamId) => availableIds.has(dreamId));
+}
+
+function applyDreamOrder(dreams, order) {
+  const sanitizedOrder = sanitizeDreamOrder(dreams, order);
+
+  if (sanitizedOrder.length === 0) {
+    return sortDreams(dreams);
+  }
+
+  const dreamsById = new Map(dreams.map((dream) => [dream.id, dream]));
+  const orderedDreams = sanitizedOrder.map((dreamId) => dreamsById.get(dreamId)).filter(Boolean);
+  const remainingDreams = sortDreams(dreams.filter((dream) => !sanitizedOrder.includes(dream.id)));
+
+  return [...orderedDreams, ...remainingDreams];
+}
+
+function reorderDreamIds(currentIds, sourceId, targetId) {
+  const nextIds = currentIds.filter((dreamId) => dreamId !== sourceId);
+  const targetIndex = nextIds.indexOf(targetId);
+
+  if (targetIndex === -1) {
+    return currentIds;
+  }
+
+  nextIds.splice(targetIndex, 0, sourceId);
+  return nextIds;
 }
 
 function humanizeStage(stage) {
