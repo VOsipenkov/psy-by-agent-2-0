@@ -25,7 +25,7 @@ public class DreamInterpretationRagService {
     private static final List<String> FIXED_QUERY_TOKENS = List.of(
         "dream",
         "interpretation",
-        "miller",
+        "symbolic",
         "jung",
         "freud",
         "gestalt",

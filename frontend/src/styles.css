@@ -157,8 +157,8 @@ body::after {
 }
 
 .auth-copy h1 {
-  max-width: 10ch;
-  font-size: clamp(42px, 7vw, 80px);
+  max-width: 11ch;
+  font-size: clamp(38px, 6vw, 62px);
 }
 
 .eyebrow {
@@ -174,7 +174,6 @@ body::after {
 }
 
 .lead,
-.sidebar-copy,
 .feature-card p,
 .modal-copy,
 .waiting-card p,
@@ -187,25 +186,25 @@ body::after {
 }
 
 .lead {
-  max-width: 42ch;
-  margin-top: 20px;
-  font-size: 18px;
+  max-width: 40ch;
+  margin-top: 18px;
+  font-size: 17px;
 }
 
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: 36px;
+  gap: 14px;
+  margin-top: 30px;
 }
 
 .feature-card {
   background: rgba(255, 255, 255, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.44);
-  border-radius: 26px;
-  padding: 18px;
+  border-radius: 22px;
+  padding: 16px;
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .feature-index {
@@ -224,10 +223,8 @@ body::after {
 .composer-label,
 .panel-label,
 .sidebar-section-head,
-.metric-card span,
 .detail-row span,
-.inline-status,
-.auth-note span {
+.inline-status {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.16em;
@@ -248,16 +245,6 @@ body::after {
   border-color: var(--accent);
   box-shadow: 0 0 0 4px rgba(235, 136, 88, 0.18);
   transform: translateY(-1px);
-}
-
-.auth-note {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 18px;
-  background: rgba(17, 33, 54, 0.05);
 }
 
 .primary-button,
@@ -312,8 +299,8 @@ body::after {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: 22px;
+  grid-template-columns: 286px minmax(0, 1fr);
+  gap: 18px;
   max-width: 1480px;
   margin: 0 auto;
 }
@@ -321,10 +308,10 @@ body::after {
 .sidebar {
   background: linear-gradient(160deg, rgba(248, 243, 235, 0.94), rgba(239, 231, 219, 0.84));
   border: 1px solid rgba(255, 255, 255, 0.36);
-  padding: 22px;
+  padding: 18px;
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
-  gap: 18px;
+  gap: 14px;
   min-height: calc(100vh - 48px);
   position: sticky;
   top: 24px;
@@ -333,7 +320,7 @@ body::after {
 .sidebar-top {
   display: grid;
   grid-template-columns: 62px minmax(0, 1fr) auto;
-  gap: 16px;
+  gap: 12px;
   align-items: start;
 }
 
@@ -351,25 +338,31 @@ body::after {
 }
 
 .sidebar h2 {
-  font-size: 32px;
-}
-
-.sidebar-copy {
-  margin-top: 10px;
-  color: var(--ink-soft);
+  font-size: 26px;
 }
 
 .sidebar-actions {
-  display: grid;
-  gap: 12px;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
 }
 
 .sidebar-logout {
   align-self: start;
+  padding: 10px 14px;
 }
 
 .new-dream-button {
-  width: 100%;
+  width: 138px;
+  height: 34px;
+  min-width: 138px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18px;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .sidebar-section-head {
@@ -392,7 +385,7 @@ body::after {
 
 .dream-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   align-content: start;
   min-height: 0;
   overflow: auto;
@@ -402,9 +395,9 @@ body::after {
 .dream-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 28px;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.58);
   border: 1px solid transparent;
   box-shadow: 0 14px 34px rgba(8, 20, 33, 0.08);
@@ -419,9 +412,9 @@ body::after {
   width: 100%;
   background: transparent;
   border: 0;
-  padding: 4px;
+  padding: 2px;
   display: grid;
-  gap: 10px;
+  gap: 6px;
   text-align: left;
 }
 
@@ -433,7 +426,7 @@ body::after {
 }
 
 .dream-card-head strong {
-  font-size: 17px;
+  font-size: 14px;
 }
 
 .dream-card-head span,
@@ -452,21 +445,21 @@ body::after {
 .hint-text,
 .error-text {
   margin: 0;
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1.55;
 }
 
 .dream-card time {
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .dream-card-delete {
-  width: 38px;
-  height: 38px;
+  width: 28px;
+  height: 28px;
   align-self: start;
   background: rgba(17, 33, 54, 0.08);
   color: rgba(17, 33, 54, 0.72);
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .workspace {
@@ -542,6 +535,30 @@ body::after {
   flex-direction: column;
   align-items: flex-end;
   gap: 10px;
+}
+
+.auth-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 6px;
+  border-radius: 18px;
+  background: rgba(17, 33, 54, 0.06);
+}
+
+.auth-switch-button {
+  border: 0;
+  border-radius: 14px;
+  padding: 11px 14px;
+  background: transparent;
+  color: rgba(17, 33, 54, 0.72);
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.auth-switch-button.is-active {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  box-shadow: 0 12px 24px rgba(8, 20, 33, 0.08);
 }
 
 .section-head h2 {
@@ -811,8 +828,7 @@ body::after {
     padding: 20px;
   }
 
-  .feature-grid,
-  .sidebar-actions {
+  .feature-grid {
     grid-template-columns: 1fr;
   }
 
@@ -834,6 +850,14 @@ body::after {
   .sidebar-logout {
     grid-column: 1 / -1;
     width: 100%;
+  }
+
+  .sidebar-actions {
+    display: flex;
+  }
+
+  .new-dream-button {
+    width: 138px;
   }
 
   .message-card {

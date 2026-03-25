@@ -1,6 +1,6 @@
 ﻿const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 const FORCE_MOCK_API = import.meta.env.VITE_USE_MOCK_API === 'true';
-const MOCK_DB_KEY = 'dream-journal-mock-db-v2';
+const MOCK_DB_KEY = 'dream-journal-mock-db-v3';
 const COMMON_WORDS = new Set([
   'и',
   'в',
@@ -188,16 +188,16 @@ function createInitialMockDb() {
       messageSeed(
         db,
         'ASSISTANT',
-        'Я бы выделил три образа: лес, поезд и дождь. В трактовке по мотивам сонника Миллера это похоже на переходный этап, где тревога уже сменяется движением вперед. Такой сон часто приходит, когда человек внутренне готов выйти из неопределенности и принять решение.',
+        'Здесь особенно заметны лес, поезд и дождь. Такой сон похож на внутренний переходный этап, где тревога уже сменяется движением вперед. Часто такой сюжет приходит, когда человек близок к решению и постепенно выходит из неопределенности.',
         minutesAgo(44),
       ),
     ],
     {
-      title: 'Лес и поезд',
+      title: 'Тревожная дорога',
       stage: 'INTERPRETED',
-      keywords: ['Лес', 'Поезд', 'Дождь'],
+      keywords: ['Спешка', 'Поезд', 'Тревога'],
       interpretation:
-        'По мотивам сонника Миллера здесь особенно заметны лес, поезд и дождь. Лес часто отражает период неопределенности, поезд связан с движением и неизбежными переменами, а дождь показывает эмоциональную разрядку. В сумме сон похож на внутренний сюжет о том, как вы проходите тревожный этап и все же входите в новое состояние с ощущением облегчения.',
+        'Здесь особенно заметны лес, поезд и дождь. Лес часто отражает период неопределенности, поезд связан с движением и неизбежными переменами, а дождь показывает эмоциональную разрядку. В сумме сон похож на внутренний сюжет о том, как вы проходите тревожный этап и все же входите в новое состояние с ощущением облегчения.',
     },
   );
 
@@ -208,12 +208,22 @@ function createInitialMockDb() {
       messageSeed(db, 'ASSISTANT', 'Опишите сон как можно подробнее. Я задам пару уточняющих вопросов, а потом соберу интерпретацию.', minutesAgo(18)),
       messageSeed(db, 'USER', 'Сегодня снился старый дом у воды, и я никак не мог открыть дверь ключом.', minutesAgo(16)),
       messageSeed(db, 'ASSISTANT', 'Интересный образ. Подскажите, дом казался знакомым или чужим, и что вы чувствовали у двери?', minutesAgo(15)),
+      messageSeed(db, 'USER', 'Будто дом знакомый с детства, а у двери было и любопытство, и тревога.', minutesAgo(13)),
+      messageSeed(db, 'ASSISTANT', 'Что было за дверью или сон закончился раньше?', minutesAgo(12)),
+      messageSeed(db, 'USER', 'Сон оборвался прямо перед тем, как замок щелкнул.', minutesAgo(11)),
+      messageSeed(
+        db,
+        'ASSISTANT',
+        'В этом сне особенно выделяются старый дом, вода и закрытая дверь. Такой сюжет часто связан с памятью, эмоциональной глубиной и частью внутреннего опыта, к которой вы уже подошли, но еще не готовы войти до конца. Любопытство рядом с тревогой показывает, что внутри назревает важное соприкосновение с чем-то личным и давно знакомым.',
+        minutesAgo(10),
+      ),
     ],
     {
-      title: 'Дом у воды',
-      stage: 'CLARIFYING',
-      keywords: ['Дом', 'Вода'],
-      interpretation: null,
+      title: 'Закрытая дверь',
+      stage: 'INTERPRETED',
+      keywords: ['Дом', 'Дверь', 'Вода'],
+      interpretation:
+        'В этом сне особенно выделяются старый дом, вода и закрытая дверь. Такой сюжет часто связан с памятью, эмоциональной глубиной и частью внутреннего опыта, к которой вы уже подошли, но еще не готовы войти до конца. Любопытство рядом с тревогой показывает, что внутри назревает важное соприкосновение с чем-то личным и давно знакомым.',
     },
   );
 
@@ -353,13 +363,13 @@ function capitalize(word) {
 }
 
 function buildDreamTitle(keywords) {
-  return keywords.slice(0, 2).join(' и ');
+  return keywords.slice(0, 2).join(' ');
 }
 
 function buildInterpretation(text, keywords) {
   const symbols = keywords.map((keyword) => keyword.toLowerCase()).join(', ');
 
-  return `По мотивам сонника Миллера в этом сне особенно выделяются ${symbols}. Такие символы часто связаны с внутренним переходом, скрытой тревогой и поиском опоры. Сон похож на сюжет о том, что вы уже чувствуете движение к переменам, но еще проверяете, насколько безопасно сделать следующий шаг. Если опираться на эмоции из рассказа, ключевой смысл здесь не в опасности, а в перестройке и поиске более устойчивого состояния.`;
+  return `В этом сне особенно выделяются ${symbols}. Такие символы часто связаны с внутренним переходом, скрытой тревогой и поиском опоры. Сон похож на сюжет о том, что вы уже чувствуете движение к переменам, но еще проверяете, насколько безопасно сделать следующий шаг. Если опираться на эмоции из рассказа, ключевой смысл здесь не в опасности, а в перестройке и поиске более устойчивого состояния.`;
 }
 
 function buildAssistantInterpretationMessage(keywords, interpretation) {
@@ -388,6 +398,52 @@ function appendUserMessage(db, dream, content) {
   dream.updatedAt = createdAt;
 }
 
+function includesAny(text, fragments) {
+  return fragments.some((fragment) => text.includes(fragment));
+}
+
+function inferDreamTitle(text, keywords) {
+  const lowered = text.toLowerCase();
+
+  if (includesAny(lowered, ['убег', 'погон', 'преслед', 'бегу', 'спаса'])) {
+    return 'Убегание';
+  }
+
+  if (includesAny(lowered, ['опазд', 'спеш', 'тороп', 'поезд', 'самолет', 'автобус', 'вокзал', 'дорог', 'еду', 'ехать'])) {
+    return includesAny(lowered, ['трев', 'страх', 'паник', 'боюсь']) ? 'Тревожная дорога' : 'Спешка';
+  }
+
+  if (includesAny(lowered, ['двер', 'замок', 'ключ'])) {
+    return 'Закрытая дверь';
+  }
+
+  if (includesAny(lowered, ['дом', 'квартир', 'комнат'])) {
+    return includesAny(lowered, ['стар', 'детств', 'родител']) ? 'Старый дом' : 'Дом';
+  }
+
+  if (includesAny(lowered, ['лес', 'темн', 'ноч', 'тень'])) {
+    return lowered.includes('лес') ? 'Темный лес' : 'Ночная тревога';
+  }
+
+  if (includesAny(lowered, ['вода', 'море', 'река', 'волна', 'дожд'])) {
+    return lowered.includes('дом') ? 'Дом у воды' : 'Глубокая вода';
+  }
+
+  if (includesAny(lowered, ['пад', 'провал', 'вниз'])) {
+    return 'Падение';
+  }
+
+  if (includesAny(lowered, ['лестниц', 'лифт', 'этаж', 'подним'])) {
+    return 'Подъем';
+  }
+
+  if (includesAny(lowered, ['мост', 'путь'])) {
+    return 'Переход';
+  }
+
+  return buildDreamTitle(keywords);
+}
+
 function advanceMockConversation(db, dream) {
   const userMessages = dream.messages.filter((message) => message.role === 'USER');
   const allUserText = userMessages.map((message) => message.content).join(' ');
@@ -408,7 +464,7 @@ function advanceMockConversation(db, dream) {
   const interpretation = buildInterpretation(allUserText, keywords);
 
   dream.keywords = keywords;
-  dream.title = buildDreamTitle(keywords);
+  dream.title = inferDreamTitle(allUserText, keywords);
   dream.stage = 'INTERPRETED';
   dream.interpretation = interpretation;
   appendAssistantMessage(db, dream, buildAssistantInterpretationMessage(keywords, interpretation));
@@ -425,14 +481,43 @@ async function mockLogin(username, password) {
   }
 
   const db = readMockDb();
-  let user = db.users.find((item) => item.username.toLowerCase() === trimmedUsername.toLowerCase());
+  const user = db.users.find((item) => item.username.toLowerCase() === trimmedUsername.toLowerCase());
 
   if (!user) {
-    user = createMockUserRecord(db, trimmedUsername, trimmedPassword);
-  } else if (user.password !== trimmedPassword) {
+    throw new Error('Пользователь с таким логином не найден.');
+  }
+
+  if (user.password !== trimmedPassword) {
     throw new Error('Неверный пароль для локального демо-режима. Попробуйте admin / admin.');
   }
 
+  writeMockDb(db);
+
+  return {
+    id: user.id,
+    username: user.username,
+    source: 'mock',
+  };
+}
+
+async function mockRegister(username, password) {
+  await delay();
+
+  const trimmedUsername = username.trim();
+  const trimmedPassword = password.trim();
+
+  if (trimmedUsername.length < 3 || trimmedPassword.length < 3) {
+    throw new Error('Логин и пароль должны быть не короче 3 символов.');
+  }
+
+  const db = readMockDb();
+  const exists = db.users.some((item) => item.username.toLowerCase() === trimmedUsername.toLowerCase());
+
+  if (exists) {
+    throw new Error('Пользователь с таким логином уже существует.');
+  }
+
+  const user = createMockUserRecord(db, trimmedUsername, trimmedPassword);
   writeMockDb(db);
 
   return {
@@ -505,6 +590,16 @@ export function loginUser(username, password) {
       body: JSON.stringify({ username, password }),
     }),
     () => mockLogin(username, password),
+  );
+}
+
+export function registerUser(username, password) {
+  return withFallback(
+    () => request('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+    () => mockRegister(username, password),
   );
 }
 

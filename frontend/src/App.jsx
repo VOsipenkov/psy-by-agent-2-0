@@ -6,6 +6,7 @@ import {
   fetchDreams,
   isMockApiEnabled,
   loginUser,
+  registerUser,
   sendDreamMessage,
 } from './api';
 
@@ -18,8 +19,10 @@ function App() {
   });
   const [dreams, setDreams] = useState([]);
   const [activeDream, setActiveDream] = useState(null);
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin');
+  const [authMode, setAuthMode] = useState('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [draftMessage, setDraftMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -87,15 +90,20 @@ function App() {
     }
   }
 
-  async function handleLogin(event) {
+  async function handleAuthSubmit(event) {
     event.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      const loggedInUser = await loginUser(username.trim(), password.trim());
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(loggedInUser));
-      setUser(loggedInUser);
+      if (authMode === 'register' && password !== confirmPassword) {
+        throw new Error('Пароли не совпадают');
+      }
+
+      const authAction = authMode === 'register' ? registerUser : loginUser;
+      const authenticatedUser = await authAction(username.trim(), password.trim());
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(authenticatedUser));
+      setUser(authenticatedUser);
     } catch (apiError) {
       setError(apiError.message);
     } finally {
@@ -252,33 +260,57 @@ function App() {
         <div className="auth-card auth-card-copy">
           <div className="auth-copy">
             <p className="eyebrow">Dream Journal</p>
-            <h1>Записывайте сны в живом диалоге, а не в скучной анкете</h1>
+            <h1>Сны, к которым можно возвращаться</h1>
             <p className="lead">
-              Ассистент задает уточняющие вопросы, выделяет ключевые образы и собирает интерпретацию в одной беседе.
+              Сохраняйте ночные сюжеты в спокойном диалоге, перечитывайте детали и получайте интерпретацию сна в одной истории.
             </p>
             <div className="feature-grid">
               <article className="feature-card">
                 <span className="feature-index">01</span>
-                <strong>Диалог вместо формы</strong>
-                <p>Вы просто рассказываете сон, как человеку, а не заполняете длинные поля.</p>
+                <strong>Живой рассказ</strong>
+                <p>Вместо анкеты вы просто рассказываете сон так, как он вспоминается.</p>
               </article>
               <article className="feature-card">
                 <span className="feature-index">02</span>
-                <strong>Ключевые символы</strong>
-                <p>После уточнений система выделит главные образы и соберет итоговый смысл сна.</p>
+                <strong>Символы и чувства</strong>
+                <p>Сервис выделяет ключевые образы, эмоции и поворотные моменты сна.</p>
               </article>
               <article className="feature-card">
                 <span className="feature-index">03</span>
-                <strong>История под рукой</strong>
-                <p>Любой прошлый сон можно открыть, перечитать и при необходимости удалить отдельно.</p>
+                <strong>Личный архив</strong>
+                <p>К каждому сну можно вернуться позже, сравнить его с новыми сюжетами или удалить.</p>
               </article>
             </div>
           </div>
 
-          <form className="auth-form" onSubmit={handleLogin}>
+          <form className="auth-form" onSubmit={handleAuthSubmit}>
             <div className="auth-form-head">
-              <p className="eyebrow">Вход</p>
-              <h2>Продолжить работу</h2>
+              <p className="eyebrow">{authMode === 'login' ? 'Вход' : 'Регистрация'}</p>
+              <h2>{authMode === 'login' ? 'Продолжить работу' : 'Создать аккаунт'}</h2>
+            </div>
+
+            <div className="auth-switch">
+              <button
+                className={`auth-switch-button ${authMode === 'login' ? 'is-active' : ''}`}
+                type="button"
+                onClick={() => {
+                  setAuthMode('login');
+                  setError('');
+                  setConfirmPassword('');
+                }}
+              >
+                Войти
+              </button>
+              <button
+                className={`auth-switch-button ${authMode === 'register' ? 'is-active' : ''}`}
+                type="button"
+                onClick={() => {
+                  setAuthMode('register');
+                  setError('');
+                }}
+              >
+                Регистрация
+              </button>
             </div>
 
             <label htmlFor="username">Логин</label>
@@ -287,7 +319,7 @@ function App() {
               name="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              placeholder="например, admin"
+              placeholder="придумайте логин"
               minLength={3}
               maxLength={40}
               required
@@ -300,21 +332,33 @@ function App() {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="например, admin"
+              placeholder={authMode === 'login' ? 'введите пароль' : 'придумайте пароль'}
               minLength={3}
               maxLength={100}
               required
             />
 
-            <div className="auth-note">
-              <span>Тестовый вход</span>
-              <strong>admin / admin</strong>
-            </div>
+            {authMode === 'register' ? (
+              <>
+                <label htmlFor="confirmPassword">Повторите пароль</label>
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  placeholder="повторите пароль"
+                  minLength={3}
+                  maxLength={100}
+                  required
+                />
+              </>
+            ) : null}
 
             <p className="hint-text">Если backend не запущен, откроется локальный демо-режим только для frontend.</p>
 
             <button type="submit" disabled={loading} className="primary-button">
-              {loading ? 'Входим...' : 'Открыть дневник'}
+              {loading ? (authMode === 'login' ? 'Входим...' : 'Создаем аккаунт...') : authMode === 'login' ? 'Открыть дневник' : 'Зарегистрироваться'}
             </button>
 
             {error ? <p className="error-text">{error}</p> : null}
@@ -333,7 +377,6 @@ function App() {
             <div>
               <p className="eyebrow">Dream Journal</p>
               <h2>{sidebarTitle}</h2>
-              <p className="sidebar-copy">Личный дневник снов и история прошлых интерпретаций.</p>
             </div>
             <button className="ghost-button sidebar-logout" type="button" onClick={handleLogout}>
               Выйти

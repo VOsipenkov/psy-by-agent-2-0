@@ -16,13 +16,26 @@ public class AuthService {
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
-        String username = request.username().trim();
+        String username = normalizeUsername(request.username());
         String password = request.password().trim();
 
         UserAccount userAccount = userAccountRepository.findByUsernameIgnoreCase(username)
             .map(existing -> loginExistingUser(existing, password))
-            .orElseGet(() -> registerUser(username, password));
+            .orElseThrow(() -> new IllegalArgumentException("ѕользователь с таким логином не найден"));
 
+        return new LoginResponse(userAccount.getId(), userAccount.getUsername());
+    }
+
+    @Transactional
+    public LoginResponse register(LoginRequest request) {
+        String username = normalizeUsername(request.username());
+        String password = request.password().trim();
+
+        if (userAccountRepository.findByUsernameIgnoreCase(username).isPresent()) {
+            throw new IllegalArgumentException("ѕользователь с таким логином уже существует");
+        }
+
+        UserAccount userAccount = registerUser(username, password);
         return new LoginResponse(userAccount.getId(), userAccount.getUsername());
     }
 
@@ -44,5 +57,9 @@ public class AuthService {
         created.setUsername(username);
         created.setPasswordHash(passwordEncoder.encode(password));
         return userAccountRepository.save(created);
+    }
+
+    private String normalizeUsername(String rawUsername) {
+        return rawUsername == null ? "" : rawUsername.trim();
     }
 }
