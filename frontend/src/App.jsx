@@ -1,9 +1,10 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createDream,
   deleteDream,
   fetchDream,
   fetchDreams,
+  isMockApiEnabled,
   loginUser,
   sendDreamMessage,
 } from './api';
@@ -23,6 +24,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [dreamToDelete, setDreamToDelete] = useState(null);
+  const [isMockMode, setIsMockMode] = useState(() => isMockApiEnabled());
+  const timelineEndRef = useRef(null);
 
   useEffect(() => {
     if (!user?.id) {
@@ -32,12 +36,38 @@ function App() {
     void bootstrapUser(user);
   }, [user?.id]);
 
+  useEffect(() => {
+    timelineEndRef.current?.scrollIntoView({
+      behavior: activeDream?.messages?.length ? 'smooth' : 'auto',
+      block: 'end',
+    });
+  }, [activeDream?.id, activeDream?.messages?.length]);
+
+  useEffect(() => {
+    if (!dreamToDelete) {
+      return undefined;
+    }
+
+    function handleEscape(event) {
+      if (event.key === 'Escape') {
+        setDreamToDelete(null);
+      }
+    }
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [dreamToDelete]);
+
+  function syncApiMode() {
+    setIsMockMode(isMockApiEnabled());
+  }
+
   async function bootstrapUser(currentUser) {
     setLoading(true);
     setError('');
 
     try {
-      const list = await fetchDreams(currentUser.id);
+      const list = sortDreams(await fetchDreams(currentUser.id));
       setDreams(list);
 
       if (list.length === 0) {
@@ -52,6 +82,7 @@ function App() {
     } catch (apiError) {
       setError(apiError.message);
     } finally {
+      syncApiMode();
       setLoading(false);
     }
   }
@@ -68,6 +99,7 @@ function App() {
     } catch (apiError) {
       setError(apiError.message);
     } finally {
+      syncApiMode();
       setLoading(false);
     }
   }
@@ -78,6 +110,7 @@ function App() {
     setDreams([]);
     setActiveDream(null);
     setDraftMessage('');
+    setDreamToDelete(null);
     setError('');
   }
 
@@ -95,6 +128,7 @@ function App() {
     } catch (apiError) {
       setError(apiError.message);
     } finally {
+      syncApiMode();
       setLoading(false);
     }
   }
@@ -111,16 +145,16 @@ function App() {
       const created = await createDream(user.id);
       setActiveDream(created);
       setDreams((current) => sortDreams([toSummary(created), ...current]));
+      setDraftMessage('');
     } catch (apiError) {
       setError(apiError.message);
     } finally {
+      syncApiMode();
       setSubmitting(false);
     }
   }
 
-  async function handleSubmitMessage(event) {
-    event.preventDefault();
-
+  async function submitCurrentMessage() {
     if (!user?.id || !activeDream?.id || !draftMessage.trim()) {
       return;
     }
@@ -136,22 +170,44 @@ function App() {
     } catch (apiError) {
       setError(apiError.message);
     } finally {
+      syncApiMode();
       setSubmitting(false);
     }
   }
 
-  async function handleDeleteDream(dreamId) {
-    if (!user?.id) {
+  function handleSubmitMessage(event) {
+    event.preventDefault();
+    void submitCurrentMessage();
+  }
+
+  function handleComposerKeyDown(event) {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
       return;
     }
 
+    event.preventDefault();
+
+    if (!loading && !submitting && draftMessage.trim()) {
+      void submitCurrentMessage();
+    }
+  }
+
+  function requestDeleteDream(dreamId) {
     const target = dreams.find((dream) => dream.id === dreamId);
-    const accepted = window.confirm(`Удалить сон "${target?.title ?? 'Без названия'}" вместе с перепиской?`);
 
-    if (!accepted) {
+    if (!target) {
       return;
     }
 
+    setDreamToDelete(target);
+  }
+
+  async function confirmDeleteDream() {
+    if (!user?.id || !dreamToDelete?.id) {
+      return;
+    }
+
+    const dreamId = dreamToDelete.id;
     setSubmitting(true);
     setError('');
 
@@ -176,7 +232,9 @@ function App() {
     } catch (apiError) {
       setError(apiError.message);
     } finally {
+      syncApiMode();
       setSubmitting(false);
+      setDreamToDelete(null);
     }
   }
 
@@ -188,16 +246,44 @@ function App() {
     return `${user.username}, ваши сны`;
   }, [user]);
 
+  const messageCount = activeDream?.messages?.length ?? 0;
+  const keywordCount = activeDream?.keywords?.length ?? 0;
+
   if (!user) {
     return (
       <div className="auth-shell">
-        <div className="auth-card">
-          <p className="eyebrow">Dream Journal</p>
-          <h1>Расскажите сон, а мы превратим его в смысл</h1>
-          <p className="lead">
-            Сервис ведет диалог, задает уточняющие вопросы и собирает интерпретацию сна с ключевыми образами.
-          </p>
+        <div className="auth-card auth-card-copy">
+          <div className="auth-copy">
+            <p className="eyebrow">Dream Journal</p>
+            <h1>Записывайте сны в живом диалоге, а не в скучной анкете</h1>
+            <p className="lead">
+              Ассистент задает уточняющие вопросы, выделяет ключевые образы и собирает интерпретацию в одной беседе.
+            </p>
+            <div className="feature-grid">
+              <article className="feature-card">
+                <span className="feature-index">01</span>
+                <strong>Диалог вместо формы</strong>
+                <p>Вы просто рассказываете сон, как человеку, а не заполняете длинные поля.</p>
+              </article>
+              <article className="feature-card">
+                <span className="feature-index">02</span>
+                <strong>Ключевые символы</strong>
+                <p>После уточнений система выделит главные образы и соберет итоговый смысл сна.</p>
+              </article>
+              <article className="feature-card">
+                <span className="feature-index">03</span>
+                <strong>История под рукой</strong>
+                <p>Любой прошлый сон можно открыть, перечитать и при необходимости удалить отдельно.</p>
+              </article>
+            </div>
+          </div>
+
           <form className="auth-form" onSubmit={handleLogin}>
+            <div className="auth-form-head">
+              <p className="eyebrow">Вход</p>
+              <h2>Продолжить работу</h2>
+            </div>
+
             <label htmlFor="username">Логин</label>
             <input
               id="username"
@@ -209,6 +295,7 @@ function App() {
               maxLength={40}
               required
             />
+
             <label htmlFor="password">Пароль</label>
             <input
               id="password"
@@ -221,142 +308,262 @@ function App() {
               maxLength={100}
               required
             />
-            <p className="hint-text">Тестовая учетка: admin / admin</p>
+
+            <div className="auth-note">
+              <span>Тестовый вход</span>
+              <strong>admin / admin</strong>
+            </div>
+
+            <p className="hint-text">Если backend не запущен, откроется локальный демо-режим только для frontend.</p>
+
             <button type="submit" disabled={loading} className="primary-button">
-              {loading ? 'Входим...' : 'Войти'}
+              {loading ? 'Входим...' : 'Открыть дневник'}
             </button>
+
+            {error ? <p className="error-text">{error}</p> : null}
           </form>
-          {error ? <p className="error-text">{error}</p> : null}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="sidebar-head">
-          <div>
-            <p className="eyebrow">Dream Journal</p>
-            <h2>{sidebarTitle}</h2>
-          </div>
-          <button className="ghost-button" type="button" onClick={handleLogout}>
-            Выйти
-          </button>
-        </div>
-
-        <button className="primary-button" type="button" onClick={handleCreateDream} disabled={submitting}>
-          Новый сон
-        </button>
-
-        <div className="dream-list">
-          {dreams.map((dream) => (
-            <button
-              key={dream.id}
-              className={`dream-pill ${activeDream?.id === dream.id ? 'is-active' : ''}`}
-              type="button"
-              onClick={() => handleSelectDream(dream.id)}
-            >
-              <div className="dream-pill-copy">
-                <strong>{dream.title}</strong>
-                <span>{dream.keywords?.length ? dream.keywords.join(', ') : 'Ожидает анализа'}</span>
-              </div>
-              <span
-                className="dream-pill-delete"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void handleDeleteDream(dream.id);
-                }}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    void handleDeleteDream(dream.id);
-                  }
-                }}
-              >
-                x
-              </span>
-            </button>
-          ))}
-        </div>
-      </aside>
-
-      <main className="workspace">
-        <section className="chat-panel">
-          <div className="chat-head">
+    <>
+      <div className="app-shell">
+        <aside className="sidebar">
+          <div className="sidebar-top">
+            <div className="profile-badge">{user.username.slice(0, 1).toUpperCase()}</div>
             <div>
-              <p className="eyebrow">Текущий сон</p>
-              <h1>{activeDream?.title ?? 'Загрузка...'}</h1>
-            </div>
-            <div className={`status-badge status-${(activeDream?.stage ?? 'NEW').toLowerCase()}`}>
-              {humanizeStage(activeDream?.stage)}
+              <p className="eyebrow">Dream Journal</p>
+              <h2>{sidebarTitle}</h2>
+              <p className="sidebar-copy">Слева вся история, справа живой разбор текущего сна.</p>
             </div>
           </div>
 
-          <div className="chat-timeline">
-            {activeDream?.messages?.map((message) => (
-              <article
-                key={message.id}
-                className={`message-card ${message.role === 'USER' ? 'message-user' : 'message-assistant'}`}
-              >
-                <p className="message-role">{message.role === 'USER' ? 'Вы' : 'Ассистент'}</p>
-                <p>{message.content}</p>
-                <time>{formatDate(message.createdAt)}</time>
+          <div className="sidebar-actions">
+            <button className="primary-button new-dream-button" type="button" onClick={handleCreateDream} disabled={submitting}>
+              Новый сон
+            </button>
+            <button className="ghost-button" type="button" onClick={handleLogout}>
+              Выйти
+            </button>
+          </div>
+
+          {isMockMode ? <div className="mock-banner">Локальный демо-режим: интерфейс работает без backend и Docker.</div> : null}
+
+          <div className="sidebar-section-head">
+            <span>История снов</span>
+            <span>{dreams.length}</span>
+          </div>
+
+          <div className="dream-list">
+            {dreams.map((dream) => (
+              <article key={dream.id} className={`dream-card ${activeDream?.id === dream.id ? 'is-active' : ''}`}>
+                <button className="dream-card-main" type="button" onClick={() => handleSelectDream(dream.id)}>
+                  <div className="dream-card-head">
+                    <strong>{dream.title}</strong>
+                    <span>{humanizeStage(dream.stage)}</span>
+                  </div>
+                  <p>{dream.keywords?.length ? dream.keywords.join(' • ') : 'Ассистент еще собирает детали'}</p>
+                  <time>{formatDate(dream.updatedAt) || 'Только что'}</time>
+                </button>
+                <button
+                  className="dream-card-delete"
+                  type="button"
+                  aria-label={`Удалить сон ${dream.title}`}
+                  onClick={() => requestDeleteDream(dream.id)}
+                >
+                  ×
+                </button>
               </article>
             ))}
-
-            {!activeDream?.messages?.length && !loading ? (
-              <div className="empty-state">
-                <p>Диалог появится здесь, как только вы начнете описывать сон.</p>
-              </div>
-            ) : null}
           </div>
+        </aside>
 
-          <form className="composer" onSubmit={handleSubmitMessage}>
-            <textarea
-              value={draftMessage}
-              onChange={(event) => setDraftMessage(event.target.value)}
-              placeholder="Опишите сон: кто был рядом, какие символы вы запомнили, что чувствовали..."
-              rows={4}
-              disabled={loading || submitting || !activeDream}
-            />
-            <div className="composer-actions">
-              {error ? <p className="error-text">{error}</p> : <p className="hint-text">Пишите свободно, как в обычном чате.</p>}
-              <button className="primary-button" type="submit" disabled={loading || submitting || !draftMessage.trim()}>
-                {submitting ? 'Отправляем...' : 'Отправить'}
+        <main className="workspace">
+          <section className="workspace-hero">
+            <div className="workspace-hero-copy">
+              <p className="eyebrow">Активная беседа</p>
+              <h1>{activeDream?.title ?? 'Подготавливаем новый сон'}</h1>
+              <p className="hero-text">{describeStage(activeDream?.stage)}</p>
+            </div>
+
+            <div className="workspace-hero-side">
+              <div className={`status-badge status-${(activeDream?.stage ?? 'NEW').toLowerCase()}`}>
+                {humanizeStage(activeDream?.stage)}
+              </div>
+              <div className="hero-metrics">
+                <article className="metric-card">
+                  <span>Сообщений</span>
+                  <strong>{messageCount}</strong>
+                </article>
+                <article className="metric-card">
+                  <span>Ключевых образов</span>
+                  <strong>{keywordCount}</strong>
+                </article>
+                <article className="metric-card">
+                  <span>Обновлено</span>
+                  <strong>{formatDate(activeDream?.updatedAt) || 'Сейчас'}</strong>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <div className="workspace-grid">
+            <section className="chat-panel">
+              <div className="section-head">
+                <div>
+                  <p className="eyebrow">Чат</p>
+                  <h2>Лента разговора</h2>
+                </div>
+                {loading ? <span className="inline-status">Обновляем...</span> : null}
+              </div>
+
+              <div className="chat-timeline">
+                {activeDream?.messages?.map((message) => (
+                  <article
+                    key={message.id}
+                    className={`message-card ${message.role === 'USER' ? 'message-user' : 'message-assistant'}`}
+                  >
+                    <div className="message-meta">
+                      <p className="message-role">{message.role === 'USER' ? 'Вы' : 'Ассистент'}</p>
+                      <time>{formatDate(message.createdAt)}</time>
+                    </div>
+                    <p className="message-content">{message.content}</p>
+                  </article>
+                ))}
+
+                {!activeDream?.messages?.length && !loading ? (
+                  <div className="empty-state">
+                    <p>Начните с любого описания сна. Ассистент сам подхватит беседу и задаст уточняющие вопросы.</p>
+                  </div>
+                ) : null}
+
+                <div ref={timelineEndRef} />
+              </div>
+
+              <form className="composer" onSubmit={handleSubmitMessage}>
+                <label className="composer-label" htmlFor="dream-message">
+                  Сообщение
+                </label>
+                <textarea
+                  id="dream-message"
+                  value={draftMessage}
+                  onChange={(event) => setDraftMessage(event.target.value)}
+                  onKeyDown={handleComposerKeyDown}
+                  placeholder="Опишите сон: кто был рядом, какие символы запомнились, что чувствовали..."
+                  rows={5}
+                  disabled={loading || submitting || !activeDream}
+                />
+                <div className="composer-actions">
+                  {error ? (
+                    <p className="error-text">{error}</p>
+                  ) : (
+                    <p className="hint-text">Enter отправляет сообщение, Shift+Enter переносит строку.</p>
+                  )}
+                  <button className="primary-button" type="submit" disabled={loading || submitting || !draftMessage.trim()}>
+                    {submitting ? 'Отправляем...' : 'Отправить'}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <aside className="insight-panel">
+              <div className="section-head section-head-light">
+                <div>
+                  <p className="eyebrow eyebrow-light">Разбор</p>
+                  <h2>Интерпретация сна</h2>
+                </div>
+              </div>
+
+              {activeDream?.interpretation ? (
+                <>
+                  <div className="keywords-block">
+                    <p className="panel-label">Ключевые образы</p>
+                    <div className="keywords">
+                      {activeDream.keywords.map((keyword) => (
+                        <span key={keyword} className="keyword-chip">
+                          {keyword}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="insight-story">
+                    <p className="panel-label">Что может означать сон</p>
+                    <p className="interpretation-text">{activeDream.interpretation}</p>
+                  </div>
+
+                  <div className="insight-details">
+                    <div className="detail-row">
+                      <span>Название сна</span>
+                      <strong>{activeDream.title}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>Статус</span>
+                      <strong>{humanizeStage(activeDream.stage)}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>Последнее обновление</span>
+                      <strong>{formatDate(activeDream.updatedAt) || 'Сейчас'}</strong>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="waiting-card waiting-card-strong">
+                    <p>
+                      Здесь появятся 2-3 ключевых слова и итоговая интерпретация, когда ассистент соберет достаточно деталей.
+                    </p>
+                  </div>
+
+                  <div className="process-list">
+                    <article className="process-step">
+                      <span>1</span>
+                      <p>Вы свободно рассказываете сон без жесткой формы.</p>
+                    </article>
+                    <article className="process-step">
+                      <span>2</span>
+                      <p>Ассистент задает пару уточняющих вопросов и выделяет символы.</p>
+                    </article>
+                    <article className="process-step">
+                      <span>3</span>
+                      <p>После этого появляется название сна и итоговая трактовка.</p>
+                    </article>
+                  </div>
+                </>
+              )}
+            </aside>
+          </div>
+        </main>
+      </div>
+
+      {dreamToDelete ? (
+        <div className="modal-scrim" role="presentation" onClick={() => setDreamToDelete(null)}>
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-dialog-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">Подтверждение</p>
+            <h2 id="delete-dialog-title">Удалить сон?</h2>
+            <p className="modal-copy">
+              Сон <strong>{dreamToDelete.title}</strong> будет удален вместе со всей перепиской. Это действие нельзя отменить.
+            </p>
+            <div className="modal-actions">
+              <button className="ghost-button" type="button" onClick={() => setDreamToDelete(null)} disabled={submitting}>
+                Отмена
+              </button>
+              <button className="danger-button" type="button" onClick={() => void confirmDeleteDream()} disabled={submitting}>
+                {submitting ? 'Удаляем...' : 'Подтвердить'}
               </button>
             </div>
-          </form>
-        </section>
-
-        <section className="insight-panel">
-          <p className="eyebrow">Интерпретация</p>
-          <h2>Смысл сна</h2>
-
-          {activeDream?.interpretation ? (
-            <>
-              <div className="keywords">
-                {activeDream.keywords.map((keyword) => (
-                  <span key={keyword} className="keyword-chip">
-                    {keyword}
-                  </span>
-                ))}
-              </div>
-              <p className="interpretation-text">{activeDream.interpretation}</p>
-              <p className="meta-text">Название сна: {activeDream.title}</p>
-            </>
-          ) : (
-            <div className="waiting-card">
-              <p>
-                Когда ассистент соберет достаточно деталей, здесь появятся ключевые слова и итоговая интерпретация сна.
-              </p>
-            </div>
-          )}
-        </section>
-      </main>
-    </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -379,9 +586,20 @@ function humanizeStage(stage) {
     case 'CLARIFYING':
       return 'Уточнение';
     case 'INTERPRETED':
-      return 'Интерпретирован';
+      return 'Интерпретация готова';
     default:
-      return 'Новый';
+      return 'Новый сон';
+  }
+}
+
+function describeStage(stage) {
+  switch (stage) {
+    case 'CLARIFYING':
+      return 'Ассистент уже уточняет детали и собирает главные символы сна.';
+    case 'INTERPRETED':
+      return 'Интерпретация уже собрана: можно перечитать беседу и итоговый разбор справа.';
+    default:
+      return 'Опишите сон свободно внизу, и ассистент сам поведет беседу дальше.';
   }
 }
 
