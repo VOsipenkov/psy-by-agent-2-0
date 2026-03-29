@@ -320,9 +320,15 @@ body::after {
 
 .sidebar-top {
   display: grid;
-  grid-template-columns: 62px minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
+}
+
+.profile-stack {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
 }
 
 .profile-badge {
@@ -341,6 +347,35 @@ body::after {
 .profile-badge-button {
   padding: 0;
   overflow: hidden;
+}
+
+.language-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgba(17, 33, 54, 0.08);
+  border: 1px solid rgba(17, 33, 54, 0.08);
+}
+
+.language-chip {
+  border: 0;
+  border-radius: 999px;
+  min-width: 42px;
+  padding: 6px 10px;
+  background: transparent;
+  color: rgba(17, 33, 54, 0.72);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.language-chip.is-active {
+  background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+  color: white;
+  box-shadow: 0 12px 24px rgba(207, 98, 55, 0.24);
 }
 
 .profile-avatar-image {

@@ -22,15 +22,22 @@ import org.springframework.util.StringUtils;
 public class DreamInterpretationRagService {
 
     private static final Pattern TOKEN_SPLIT_PATTERN = Pattern.compile("[^\\p{L}\\p{N}]+");
+    private static final Set<String> QUERY_STOP_WORDS = Set.of(
+        "и", "или", "что", "как", "когда", "после", "потом", "очень", "сразу",
+        "будто", "кажется", "который", "которая", "которые", "этого", "этот", "эта",
+        "если", "меня", "мне", "него", "тогда", "почему", "снова", "уже",
+        "because", "about", "there", "their", "them", "they", "then", "when", "where",
+        "while", "with", "from", "into", "this", "that", "have", "been", "were", "was"
+    );
     private static final List<String> FIXED_QUERY_TOKENS = List.of(
-        "dream",
-        "interpretation",
-        "symbolic",
-        "jung",
-        "freud",
-        "gestalt",
-        "symbols",
-        "emotion"
+        "dream", "dreams", "interpretation", "emotion", "relationship", "family",
+        "father", "mother", "teacher", "school", "authority", "identity", "boundaries",
+        "safety", "deception", "betrayal", "home", "fear", "shame", "police", "trust",
+        "mistrust", "impostor", "support", "divorce", "memory", "regression",
+        "сон", "сны", "интерпретация", "эмоции", "отношения", "семья", "отец",
+        "мать", "папа", "учитель", "школа", "авторитет", "идентичность", "границы",
+        "безопасность", "обман", "подмена", "предательство", "дом", "страх", "стыд",
+        "полиция", "доверие", "недоверие", "помощь", "подруга", "развод", "прошлое"
     );
 
     private final List<KnowledgeChunk> knowledgeChunks;
@@ -39,15 +46,15 @@ public class DreamInterpretationRagService {
         this.knowledgeChunks = loadKnowledgeChunks(objectMapper);
     }
 
-    public String buildContext(DreamConversation conversation) {
-        List<KnowledgeChunk> retrievedChunks = retrieve(conversation, 5);
+    public String buildContext(DreamConversation conversation, String language) {
+        List<KnowledgeChunk> retrievedChunks = retrieve(conversation, 8);
         StringBuilder builder = new StringBuilder();
 
         for (KnowledgeChunk chunk : retrievedChunks) {
             builder.append("- [")
                 .append(chunk.title())
                 .append("] ")
-                .append(chunk.content())
+                .append(chunk.content(language))
                 .append('\n');
         }
 
@@ -69,7 +76,7 @@ public class DreamInterpretationRagService {
     }
 
     private Set<String> buildQueryTokens(DreamConversation conversation) {
-        List<String> tokens = new ArrayList<>();
+        LinkedHashSet<String> tokens = new LinkedHashSet<>();
 
         conversation.getMessages().stream()
             .sorted(Comparator.comparing(DreamMessage::getCreatedAt))
@@ -85,10 +92,7 @@ public class DreamInterpretationRagService {
         tokens.addAll(FIXED_QUERY_TOKENS);
 
         return tokens.stream()
-            .map(token -> token.toLowerCase(Locale.ROOT))
-            .distinct()
-            .sorted(Comparator.comparingInt(String::length).reversed())
-            .limit(16)
+            .limit(28)
             .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
     }
 
@@ -96,9 +100,10 @@ public class DreamInterpretationRagService {
         List<String> tokens = new ArrayList<>();
 
         for (String token : TOKEN_SPLIT_PATTERN.split(text.toLowerCase(Locale.ROOT))) {
-            if (token.length() >= 4) {
-                tokens.add(token);
+            if (token.length() < 4 || QUERY_STOP_WORDS.contains(token)) {
+                continue;
             }
+            tokens.add(token);
         }
 
         return tokens;
@@ -107,10 +112,10 @@ public class DreamInterpretationRagService {
     private int score(KnowledgeChunk chunk, Set<String> queryTokens) {
         String searchableText = chunk.searchableText();
         long matches = queryTokens.stream()
-            .filter(searchableText::contains)
+            .filter(token -> searchableText.contains(token))
             .count();
 
-        int baseScore = chunk.priority() * 10 + Math.toIntExact(matches) * 25;
+        int baseScore = chunk.priority() * 10 + Math.toIntExact(matches) * 30;
         return chunk.alwaysInclude() ? baseScore + 1_000 : baseScore;
     }
 
@@ -134,11 +139,16 @@ public class DreamInterpretationRagService {
         int priority,
         boolean alwaysInclude,
         List<String> tags,
-        String content
+        String contentRu,
+        String contentEn
     ) {
         String searchableText() {
             String tagText = tags == null ? "" : String.join(" ", tags);
-            return (title + " " + tagText + " " + content).toLowerCase(Locale.ROOT);
+            return (title + " " + tagText + " " + contentRu + " " + contentEn).toLowerCase(Locale.ROOT);
+        }
+
+        String content(String language) {
+            return "en".equalsIgnoreCase(language) ? contentEn : contentRu;
         }
     }
 }

@@ -26,8 +26,11 @@ public class DreamConversationController {
     }
 
     @PostMapping
-    public ResponseEntity<DreamConversationDetailResponse> create(@PathVariable UUID userId) {
-        return ResponseEntity.ok(dreamConversationService.createConversation(userId));
+    public ResponseEntity<DreamConversationDetailResponse> create(
+        @PathVariable UUID userId,
+        @RequestBody(required = false) CreateConversationRequest request
+    ) {
+        return ResponseEntity.ok(dreamConversationService.createConversation(userId, request));
     }
 
     @GetMapping("/{dreamId}")

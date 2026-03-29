@@ -81,6 +81,10 @@ const SYMBOL_HINTS = [
 
 let mockModeEnabled = FORCE_MOCK_API;
 
+function normalizeLanguage(language) {
+  return language === 'en' ? 'en' : 'ru';
+}
+
 async function request(path, options = {}) {
   try {
     const response = await fetch(`${API_BASE}${path}`, {
@@ -260,11 +264,18 @@ function createSeedDream(db, userId, messages, overrides = {}) {
   return dream;
 }
 
-function createEmptyDream(db, userId) {
+function getWelcomeMessage(language) {
+  return normalizeLanguage(language) === 'en'
+    ? 'Describe your dream in as much detail as you can. I will ask a couple of focused questions and then offer an interpretation.'
+    : 'Опишите сон как можно подробнее. Я задам пару уточняющих вопросов, а потом соберу интерпретацию.';
+}
+
+function createEmptyDream(db, userId, language = 'ru') {
   const now = new Date().toISOString();
+  const normalizedLanguage = normalizeLanguage(language);
   const dream = {
     id: nextId(db, 'dream'),
-    title: 'Новый сон',
+    title: normalizedLanguage === 'en' ? 'New dream' : 'Новый сон',
     stage: 'NEW',
     keywords: [],
     interpretation: null,
@@ -273,7 +284,7 @@ function createEmptyDream(db, userId) {
       {
         id: nextId(db, 'message'),
         role: 'ASSISTANT',
-        content: 'Опишите сон как можно подробнее. Я задам пару уточняющих вопросов, а потом соберу интерпретацию.',
+        content: getWelcomeMessage(normalizedLanguage),
         createdAt: now,
       },
     ],
@@ -367,13 +378,21 @@ function buildDreamTitle(keywords) {
   return keywords.slice(0, 2).join(' ');
 }
 
-function buildInterpretation(text, keywords) {
+function buildInterpretation(text, keywords, language = 'ru') {
   const symbols = keywords.map((keyword) => keyword.toLowerCase()).join(', ');
+
+  if (normalizeLanguage(language) === 'en') {
+    return `The dream seems to gather around ${symbols}. Rather than treating them as isolated symbols, it may be more useful to read the dream as a story about tension, uncertainty, and the need to regain safety and control. The key meaning is often not the danger itself, but the emotional shift that reveals where you no longer fully trust the situation around you.`;
+  }
 
   return `В этом сне особенно выделяются ${symbols}. Такие символы часто связаны с внутренним переходом, скрытой тревогой и поиском опоры. Сон похож на сюжет о том, что вы уже чувствуете движение к переменам, но еще проверяете, насколько безопасно сделать следующий шаг. Если опираться на эмоции из рассказа, ключевой смысл здесь не в опасности, а в перестройке и поиске более устойчивого состояния.`;
 }
 
-function buildAssistantInterpretationMessage(keywords, interpretation) {
+function buildAssistantInterpretationMessage(keywords, interpretation, language = 'ru') {
+  if (normalizeLanguage(language) === 'en') {
+    return `I would highlight these key motifs: ${keywords.join(', ')}.\n\n${interpretation}`;
+  }
+
   return `Я бы выделил ключевые образы: ${keywords.join(', ')}.\n\n${interpretation}`;
 }
 
@@ -403,72 +422,94 @@ function includesAny(text, fragments) {
   return fragments.some((fragment) => text.includes(fragment));
 }
 
-function inferDreamTitle(text, keywords) {
+function inferDreamTitle(text, keywords, language = 'ru') {
   const lowered = text.toLowerCase();
+  const isEnglish = normalizeLanguage(language) === 'en';
 
   if (includesAny(lowered, ['убег', 'погон', 'преслед', 'бегу', 'спаса'])) {
-    return 'Убегание';
+    return isEnglish ? 'Escape' : 'Убегание';
   }
 
   if (includesAny(lowered, ['опазд', 'спеш', 'тороп', 'поезд', 'самолет', 'автобус', 'вокзал', 'дорог', 'еду', 'ехать'])) {
-    return includesAny(lowered, ['трев', 'страх', 'паник', 'боюсь']) ? 'Тревожная дорога' : 'Спешка';
+    return includesAny(lowered, ['трев', 'страх', 'паник', 'боюсь'])
+      ? (isEnglish ? 'Anxious road' : 'Тревожная дорога')
+      : (isEnglish ? 'Rush' : 'Спешка');
   }
 
   if (includesAny(lowered, ['двер', 'замок', 'ключ'])) {
-    return 'Закрытая дверь';
+    return isEnglish ? 'Closed door' : 'Закрытая дверь';
   }
 
   if (includesAny(lowered, ['дом', 'квартир', 'комнат'])) {
-    return includesAny(lowered, ['стар', 'детств', 'родител']) ? 'Старый дом' : 'Дом';
+    return includesAny(lowered, ['стар', 'детств', 'родител'])
+      ? (isEnglish ? 'Old house' : 'Старый дом')
+      : (isEnglish ? 'Home' : 'Дом');
   }
 
   if (includesAny(lowered, ['лес', 'темн', 'ноч', 'тень'])) {
-    return lowered.includes('лес') ? 'Темный лес' : 'Ночная тревога';
+    return lowered.includes('лес')
+      ? (isEnglish ? 'Dark forest' : 'Темный лес')
+      : (isEnglish ? 'Night fear' : 'Ночная тревога');
   }
 
   if (includesAny(lowered, ['вода', 'море', 'река', 'волна', 'дожд'])) {
-    return lowered.includes('дом') ? 'Дом у воды' : 'Глубокая вода';
+    return lowered.includes('дом')
+      ? (isEnglish ? 'House by water' : 'Дом у воды')
+      : (isEnglish ? 'Deep water' : 'Глубокая вода');
   }
 
   if (includesAny(lowered, ['пад', 'провал', 'вниз'])) {
-    return 'Падение';
+    return isEnglish ? 'Falling' : 'Падение';
   }
 
   if (includesAny(lowered, ['лестниц', 'лифт', 'этаж', 'подним'])) {
-    return 'Подъем';
+    return isEnglish ? 'Ascent' : 'Подъем';
   }
 
   if (includesAny(lowered, ['мост', 'путь'])) {
-    return 'Переход';
+    return isEnglish ? 'Crossing' : 'Переход';
   }
 
   return buildDreamTitle(keywords);
 }
 
-function advanceMockConversation(db, dream) {
+function advanceMockConversation(db, dream, language = 'ru') {
+  const normalizedLanguage = normalizeLanguage(language);
   const userMessages = dream.messages.filter((message) => message.role === 'USER');
   const allUserText = userMessages.map((message) => message.content).join(' ');
 
   if (userMessages.length === 1) {
     dream.stage = 'CLARIFYING';
-    appendAssistantMessage(db, dream, 'Что в этом сне чувствовалось сильнее всего: тревога, облегчение, интерес или растерянность? И был ли рядом кто-то важный?');
+    appendAssistantMessage(
+      db,
+      dream,
+      normalizedLanguage === 'en'
+        ? 'What felt strongest in the dream: fear, relief, curiosity, or confusion? And was someone important nearby?'
+        : 'Что в этом сне чувствовалось сильнее всего: тревога, облегчение, интерес или растерянность? И был ли рядом кто-то важный?',
+    );
     return;
   }
 
   if (userMessages.length === 2) {
     dream.stage = 'CLARIFYING';
-    appendAssistantMessage(db, dream, 'Еще один момент для точности: чем все закончилось и какой образ запомнился самым ярким в финале?');
+    appendAssistantMessage(
+      db,
+      dream,
+      normalizedLanguage === 'en'
+        ? 'One more detail for accuracy: how did it end, and which image stayed with you most strongly at the end?'
+        : 'Еще один момент для точности: чем все закончилось и какой образ запомнился самым ярким в финале?',
+    );
     return;
   }
 
   const keywords = extractKeywords(allUserText);
-  const interpretation = buildInterpretation(allUserText, keywords);
+  const interpretation = buildInterpretation(allUserText, keywords, normalizedLanguage);
 
   dream.keywords = keywords;
-  dream.title = inferDreamTitle(allUserText, keywords);
+  dream.title = inferDreamTitle(allUserText, keywords, normalizedLanguage);
   dream.stage = 'INTERPRETED';
   dream.interpretation = interpretation;
-  appendAssistantMessage(db, dream, buildAssistantInterpretationMessage(keywords, interpretation));
+  appendAssistantMessage(db, dream, buildAssistantInterpretationMessage(keywords, interpretation, normalizedLanguage));
 }
 
 async function mockLogin(username, password) {
@@ -562,10 +603,10 @@ async function mockFetchDreams(userId) {
   return clone(collection.map(summarizeDream));
 }
 
-async function mockCreateDream(userId) {
+async function mockCreateDream(userId, language) {
   await delay();
   const db = readMockDb();
-  const dream = createEmptyDream(db, userId);
+  const dream = createEmptyDream(db, userId, language);
   sortDreamsInDb(db, userId);
   writeMockDb(db);
   return clone(dream);
@@ -583,7 +624,7 @@ async function mockFetchDream(userId, dreamId) {
   return clone(dream);
 }
 
-async function mockSendDreamMessage(userId, dreamId, content) {
+async function mockSendDreamMessage(userId, dreamId, content, language) {
   await delay();
   const db = readMockDb();
   const dream = getDreamRecord(db, userId, dreamId);
@@ -593,7 +634,7 @@ async function mockSendDreamMessage(userId, dreamId, content) {
   }
 
   appendUserMessage(db, dream, content);
-  advanceMockConversation(db, dream);
+  advanceMockConversation(db, dream, language);
   sortDreamsInDb(db, userId);
   writeMockDb(db);
   return clone(dream);
@@ -638,12 +679,13 @@ export function fetchDreams(userId) {
   );
 }
 
-export function createDream(userId) {
+export function createDream(userId, language) {
   return withFallback(
     () => request(`/api/users/${userId}/dreams`, {
       method: 'POST',
+      body: JSON.stringify({ language: normalizeLanguage(language) }),
     }),
-    () => mockCreateDream(userId),
+    () => mockCreateDream(userId, language),
   );
 }
 
@@ -654,13 +696,13 @@ export function fetchDream(userId, dreamId) {
   );
 }
 
-export function sendDreamMessage(userId, dreamId, content) {
+export function sendDreamMessage(userId, dreamId, content, language) {
   return withFallback(
     () => request(`/api/users/${userId}/dreams/${dreamId}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, language: normalizeLanguage(language) }),
     }),
-    () => mockSendDreamMessage(userId, dreamId, content),
+    () => mockSendDreamMessage(userId, dreamId, content, language),
   );
 }
 

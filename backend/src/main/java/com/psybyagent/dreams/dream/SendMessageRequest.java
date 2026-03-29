@@ -6,6 +6,8 @@ import jakarta.validation.constraints.Size;
 public record SendMessageRequest(
     @NotBlank(message = "Сообщение не должно быть пустым")
     @Size(max = 4000, message = "Сообщение слишком длинное")
-    String content
+    String content,
+
+    String language
 ) {
 }

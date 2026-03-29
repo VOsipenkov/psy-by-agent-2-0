@@ -16,8 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class DreamConversationService {
 
-    private static final String WELCOME_MESSAGE = "Опишите свой сон как можно подробнее. Я задам пару уточняющих вопросов, выделю ключевые символы и предложу интерпретацию.";
-
     private final UserAccountRepository userAccountRepository;
     private final DreamConversationRepository dreamConversationRepository;
     private final DreamAiService dreamAiService;
@@ -33,14 +31,15 @@ public class DreamConversationService {
     }
 
     @Transactional
-    public DreamConversationDetailResponse createConversation(UUID userId) {
+    public DreamConversationDetailResponse createConversation(UUID userId, CreateConversationRequest request) {
         UserAccount userAccount = ensureUserExists(userId);
+        String language = normalizeLanguage(request == null ? null : request.language());
 
         DreamConversation conversation = new DreamConversation();
         conversation.setUserAccount(userAccount);
-        conversation.setTitle("Новый сон");
+        conversation.setTitle(defaultTitle(language));
         conversation.setStage(DreamStage.NEW);
-        conversation.addMessage(DreamMessage.assistant(WELCOME_MESSAGE));
+        conversation.addMessage(DreamMessage.assistant(welcomeMessage(language)));
 
         DreamConversation saved = dreamConversationRepository.saveAndFlush(conversation);
         return toDetail(saved);
@@ -54,12 +53,13 @@ public class DreamConversationService {
     @Transactional
     public DreamConversationDetailResponse addUserMessage(UUID userId, UUID dreamId, SendMessageRequest request) {
         DreamConversation conversation = getConversationEntity(userId, dreamId);
+        String language = normalizeLanguage(request.language());
         conversation.addMessage(DreamMessage.user(request.content().trim()));
         conversation.setStage(conversation.getStage() == DreamStage.NEW ? DreamStage.CLARIFYING : conversation.getStage());
         conversation = dreamConversationRepository.saveAndFlush(conversation);
 
         List<DreamConversation> recentDreams = findRecentDreamsForAnalysis(conversation);
-        DreamAiResult aiResult = dreamAiService.generateReply(conversation, recentDreams);
+        DreamAiResult aiResult = dreamAiService.generateReply(conversation, recentDreams, language);
 
         if (aiResult.stage() == DreamStage.INTERPRETED) {
             conversation.setStage(DreamStage.INTERPRETED);
@@ -74,6 +74,20 @@ public class DreamConversationService {
         conversation.addMessage(DreamMessage.assistant(aiResult.assistantMessage()));
         DreamConversation saved = dreamConversationRepository.saveAndFlush(conversation);
         return toDetail(saved);
+    }
+
+    private String normalizeLanguage(String language) {
+        return "en".equalsIgnoreCase(language) ? "en" : "ru";
+    }
+
+    private String welcomeMessage(String language) {
+        return "en".equals(language)
+            ? "Describe your dream in as much detail as you can. I will ask a couple of focused questions, identify the key motifs, and offer an interpretation."
+            : "Опишите свой сон как можно подробнее. Я задам пару уточняющих вопросов, выделю ключевые символы и предложу интерпретацию.";
+    }
+
+    private String defaultTitle(String language) {
+        return "en".equals(language) ? "New dream" : "Новый сон";
     }
 
     private List<DreamConversation> findRecentDreamsForAnalysis(DreamConversation conversation) {

@@ -5,5 +5,5 @@ import java.util.List;
 
 public interface DreamAiService {
 
-    DreamAiResult generateReply(DreamConversation conversation, List<DreamConversation> recentDreams);
+    DreamAiResult generateReply(DreamConversation conversation, List<DreamConversation> recentDreams, String language);
 }
