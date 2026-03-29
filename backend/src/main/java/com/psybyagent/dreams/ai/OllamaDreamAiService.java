@@ -1,5 +1,6 @@
 package com.psybyagent.dreams.ai;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.psybyagent.dreams.config.OllamaProperties;
 import com.psybyagent.dreams.dream.ChatRole;
@@ -31,9 +32,9 @@ public class OllamaDreamAiService implements DreamAiService {
 
     private static final Pattern TOKEN_SPLIT_PATTERN = Pattern.compile("[^\\p{L}\\p{N}]+");
     private static final Set<String> STOP_WORDS = Set.of(
-        "и", "в", "во", "на", "но", "что", "как", "мне", "меня", "был", "была", "были",
-        "это", "этот", "она", "они", "его", "ее", "мы", "вы", "ты", "я", "сон", "сна",
-        "потом", "когда", "где", "или", "под", "над", "из", "за", "для", "очень",
+        "и", "в", "во", "на", "не", "но", "что", "как", "мне", "меня", "был", "была", "были",
+        "это", "этот", "эта", "эти", "она", "они", "его", "ее", "мы", "вы", "ты", "я", "сон",
+        "сны", "потом", "когда", "где", "или", "под", "над", "из", "за", "для", "очень",
         "the", "with", "from", "into", "that", "this", "were", "when", "where", "about",
         "after", "before", "there", "their", "have", "felt", "dream"
     );
@@ -42,47 +43,36 @@ public class OllamaDreamAiService implements DreamAiService {
         "какие", "какой", "какая", "какое", "так", "просто", "such", "this", "that", "just"
     );
     private static final Set<String> TITLE_GENERIC_WORDS = Set.of(
-        "человек", "люди", "людьми", "женщина", "мужчина", "кто-то", "ктото",
-        "person", "people", "woman", "man", "someone"
+        "человек", "люди", "женщина", "мужчина", "кто-то", "person", "people", "woman", "man", "someone"
     );
     private static final Set<String> GENERIC_SYMBOL_MARKERS = Set.of(
-        "вода", "море", "река", "двер", "поезд", "лес", "город",
+        "вода", "море", "река", "дверь", "поезд", "лес", "город",
         "water", "sea", "river", "door", "train", "forest", "city"
     );
     private static final List<ThemeDefinition> THEME_DEFINITIONS = List.of(
         new ThemeDefinition("deception_false_identity", "обман", "deception", 6, List.of(
-            "обман", "обманы", "заман", "ловуш", "не та", "не тот", "не она", "не он",
-            "подмен", "ложн", "притвор", "самозван",
-            "deception", "deceiv", "trap", "impostor", "false", "fake", "not her", "not him"
+            "обман", "заман", "ловуш", "не та", "не тот", "ложн", "подмен", "deception", "trap", "false", "fake", "impostor"
         )),
         new ThemeDefinition("school_authority", "школа", "school", 5, List.of(
-            "школ", "урок", "класс", "учител", "литератур", "математ", "экзам", "оцен",
-            "school", "teacher", "class", "lesson", "exam", "authority", "evaluation"
+            "школ", "урок", "класс", "учител", "литератур", "математ", "school", "teacher", "class", "lesson", "authority", "evaluation"
         )),
         new ThemeDefinition("family_identity", "отец", "father", 5, List.of(
-            "отец", "отца", "отцом", "пап", "родител", "семь", "развод", "бывш",
-            "father", "dad", "parent", "family", "divorce", "ex-partner", "former partner",
-            "identity", "resemblance"
+            "отец", "отца", "отцом", "пап", "родител", "семь", "развод", "бывш", "father", "dad", "parent", "family", "divorce", "resemblance", "identity"
         )),
         new ThemeDefinition("protection_help", "защита", "protection", 4, List.of(
-            "полици", "подруг", "помощ", "звон", "вызвал", "вызвала", "спас", "защит", "контрол",
-            "police", "friend", "help", "call", "protect", "support", "control", "agency"
+            "полици", "подруг", "помощ", "звон", "вызва", "защит", "контрол", "police", "friend", "help", "call", "protect", "support", "control", "agency"
         )),
         new ThemeDefinition("shame_grief", "стыд", "shame", 3, List.of(
-            "стыд", "стыдно", "грусть", "груст", "вина", "неловк",
-            "shame", "ashamed", "grief", "sad", "sadness", "guilt", "embarrass"
+            "стыд", "стыдно", "грусть", "груст", "вина", "неловк", "shame", "ashamed", "grief", "sad", "sadness", "guilt", "embarrass"
         )),
         new ThemeDefinition("trust_mistrust", "недоверие", "mistrust", 3, List.of(
-            "довер", "недовер", "подозр", "сомне", "верить",
-            "trust", "mistrust", "suspicion", "doubt", "uncertain"
+            "довер", "недовер", "подозр", "сомне", "верить", "trust", "mistrust", "suspicion", "doubt", "uncertain"
         )),
-        new ThemeDefinition("home_boundaries", "дом", "home", 1, List.of(
-            "дом", "дома", "домой", "квартир", "комнат", "пространств", "границ",
-            "private space", "home", "house", "apartment", "room", "boundary", "boundaries"
+        new ThemeDefinition("home_boundaries", "дом", "home", 2, List.of(
+            "дом", "дома", "домой", "квартир", "комнат", "пространств", "границ", "private space", "home", "house", "apartment", "room", "boundary", "boundaries"
         )),
-        new ThemeDefinition("fear_threat", "страх", "fear", 1, List.of(
-            "страх", "страш", "опас", "угроз", "тревог", "боюсь",
-            "panic", "fear", "afraid", "danger", "threat", "unsafe", "anxiety"
+        new ThemeDefinition("fear_threat", "страх", "fear", 2, List.of(
+            "страх", "страш", "опас", "угроз", "тревог", "боюсь", "panic", "fear", "afraid", "danger", "threat", "unsafe", "anxiety"
         ))
     );
 
@@ -96,12 +86,12 @@ public class OllamaDreamAiService implements DreamAiService {
 
     @Override
     public DreamAiResult generateReply(DreamConversation conversation, List<DreamConversation> recentDreams, String language) {
-        List<DreamConversation> recentDreamContext = recentDreams == null ? List.of() : recentDreams;
         String normalizedLanguage = normalizeLanguage(language);
-        List<DreamConversation> relevantRecentDreams = selectRelevantRecentDreams(conversation, recentDreamContext, normalizedLanguage);
+        ConversationSnapshot snapshot = buildSnapshot(conversation, normalizedLanguage);
+        List<DreamConversation> relevantRecentDreams = selectRelevantRecentDreams(snapshot, recentDreams, normalizedLanguage);
 
         try {
-            String prompt = buildPrompt(conversation, relevantRecentDreams, normalizedLanguage);
+            String prompt = buildPrompt(snapshot, conversation, relevantRecentDreams, normalizedLanguage);
             String requestBody = objectMapper.writeValueAsString(
                 new OllamaGenerateRequest(ollamaProperties.getModel(), prompt, false, "json")
             );
@@ -113,128 +103,225 @@ public class OllamaDreamAiService implements DreamAiService {
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                 .build();
 
-            HttpResponse<String> response = httpClient.send(
-                request,
-                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
-            );
-
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() >= 400 || !StringUtils.hasText(response.body())) {
-                return fallback(conversation, relevantRecentDreams, normalizedLanguage);
+                return fallback(snapshot, conversation, relevantRecentDreams, normalizedLanguage);
             }
 
             String responseText = extractResponseText(response.body());
             if (!StringUtils.hasText(responseText)) {
-                return fallback(conversation, relevantRecentDreams, normalizedLanguage);
+                return fallback(snapshot, conversation, relevantRecentDreams, normalizedLanguage);
             }
 
             OllamaAnalysisPayload payload = objectMapper.readValue(normalizeJson(responseText), OllamaAnalysisPayload.class);
-            return toResult(payload, conversation, relevantRecentDreams, normalizedLanguage);
+            return toResult(payload, snapshot, conversation, relevantRecentDreams, normalizedLanguage);
         } catch (Exception exception) {
             log.warn("Falling back to local dream analysis because Ollama call failed: {}", exception.getMessage());
-            return fallback(conversation, relevantRecentDreams, normalizedLanguage);
+            return fallback(snapshot, conversation, relevantRecentDreams, normalizedLanguage);
         }
     }
 
     private DreamAiResult toResult(
         OllamaAnalysisPayload payload,
+        ConversationSnapshot snapshot,
         DreamConversation conversation,
         List<DreamConversation> recentDreams,
         String language
     ) {
-        DreamStage stage = "INTERPRETED".equalsIgnoreCase(payload.stage()) ? DreamStage.INTERPRETED : DreamStage.CLARIFYING;
-
-        if (stage == DreamStage.INTERPRETED) {
-            List<String> keywords = sanitizeKeywords(payload.keywords(), conversation, language);
-            String interpretationSource = StringUtils.hasText(payload.interpretation())
-                ? payload.interpretation().trim()
-                : payload.assistantMessage();
-            if (!StringUtils.hasText(interpretationSource)) {
-                return fallback(conversation, recentDreams, language);
-            }
-
-            String interpretation = sanitizeOutputText(interpretationSource.trim());
-            String assistantMessage = sanitizeOutputText(StringUtils.hasText(payload.assistantMessage())
-                ? payload.assistantMessage().trim()
-                : interpretation);
-            String title = chooseTitle(payload.title(), keywords, conversation, language);
-
-            if (shouldUseFallback(payload, title, keywords, assistantMessage, interpretation, conversation, language)) {
-                return fallback(conversation, recentDreams, language);
-            }
-
-            interpretation = mergeRecurringInsight(interpretation, buildRecurringDreamsInsight(keywords, recentDreams, language), language);
-            return new DreamAiResult(stage, assistantMessage, title, keywords, interpretation);
+        boolean shouldClarify = "CLARIFYING".equalsIgnoreCase(payload.stage()) && !snapshot.readyForInterpretation();
+        if (shouldClarify) {
+            String assistantMessage = sanitizeOutputText(firstNonBlank(payload.assistantMessage(), clarifyingQuestion(language)));
+            return new DreamAiResult(
+                DreamStage.CLARIFYING,
+                assistantMessage,
+                conversation.getTitle(),
+                sanitizeKeywords(payload.keywords(), snapshot, conversation, language),
+                conversation.getInterpretation()
+            );
         }
 
-        if (countUserMessages(conversation) >= 3 || hasEnoughDetailForInterpretation(conversation)) {
-            return fallback(conversation, recentDreams, language);
+        String interpretationSource = firstNonBlank(payload.interpretation(), payload.assistantMessage());
+        if (!StringUtils.hasText(interpretationSource)) {
+            return fallback(snapshot, conversation, recentDreams, language);
         }
 
-        String assistantMessage = sanitizeOutputText(StringUtils.hasText(payload.assistantMessage())
-            ? payload.assistantMessage().trim()
-            : clarifyingQuestion(language));
+        List<String> keywords = sanitizeKeywords(payload.keywords(), snapshot, conversation, language);
+        String title = chooseTitle(payload.title(), keywords, snapshot, language);
+        String interpretation = sanitizeOutputText(interpretationSource);
 
-        return new DreamAiResult(
-            DreamStage.CLARIFYING,
-            assistantMessage,
-            conversation.getTitle(),
-            List.copyOf(conversation.getKeywords()),
-            conversation.getInterpretation()
-        );
-    }
+        if (shouldUseFallback(payload, title, keywords, interpretation, snapshot)) {
+            return fallback(snapshot, conversation, recentDreams, language);
+        }
 
-    private DreamAiResult fallback(DreamConversation conversation, List<DreamConversation> recentDreams, String language) {
-        String narrative = extractUserNarrativeVerbatim(conversation);
-        List<String> keywords = extractKeywords(narrative, language);
-        String title = chooseTitle(null, keywords, conversation, language);
-        String interpretation = fallbackInterpretation(conversation, keywords, language);
-        interpretation = mergeRecurringInsight(interpretation, buildRecurringDreamsInsight(keywords, recentDreams, language), language);
+        String recurringInsight = buildRecurringDreamsInsight(keywords, recentDreams, language);
+        interpretation = mergeRecurringInsight(interpretation, recurringInsight);
+
         return new DreamAiResult(DreamStage.INTERPRETED, interpretation, title, keywords, interpretation);
     }
 
-    private String buildPrompt(DreamConversation conversation, List<DreamConversation> recentDreams, String language) {
-        String ragContext = dreamInterpretationRagService.buildContext(conversation, language);
-        String recentDreamsContext = buildRecentDreamsContext(conversation, recentDreams, language);
-        String therapistLanguage = isEnglish(language) ? "English" : "Russian";
-        String targetLanguage = isEnglish(language) ? "English" : "Russian";
-        String currentNarrative = trimExcerpt(extractUserNarrativeVerbatim(conversation), 2_000);
-        String currentMotifs = formatDetectedMotifs(conversation, language);
+    private DreamAiResult fallback(
+        ConversationSnapshot snapshot,
+        DreamConversation conversation,
+        List<DreamConversation> recentDreams,
+        String language
+    ) {
+        List<String> keywords = sanitizeKeywords(List.of(), snapshot, conversation, language);
+        String title = chooseTitle(null, keywords, snapshot, language);
+        String interpretation = fallbackInterpretation(snapshot, keywords, language);
+        interpretation = mergeRecurringInsight(interpretation, buildRecurringDreamsInsight(keywords, recentDreams, language));
+        return new DreamAiResult(DreamStage.INTERPRETED, interpretation, title, keywords, interpretation);
+    }
 
-        StringBuilder builder = new StringBuilder();
-        builder.append("""
-            You are a %s-speaking psychotherapist who interprets dreams with care and precision.
+    private String buildPrompt(
+        ConversationSnapshot snapshot,
+        DreamConversation conversation,
+        List<DreamConversation> recentDreams,
+        String language
+    ) {
+        String ragContext = dreamInterpretationRagService.buildContext(conversation, language);
+        String recentDreamsContext = buildRecentDreamsContext(snapshot, recentDreams, language);
+        String motifText = formatDetectedMotifs(snapshot, language);
+
+        return isEnglish(language)
+            ? buildEnglishPrompt(snapshot, ragContext, recentDreamsContext, motifText)
+            : buildRussianPrompt(snapshot, ragContext, recentDreamsContext, motifText);
+    }
+
+    private String buildRussianPrompt(
+        ConversationSnapshot snapshot,
+        String ragContext,
+        String recentDreamsContext,
+        String motifText
+    ) {
+        return """
+            Ты русскоязычный психотерапевт, который бережно и точно интерпретирует сновидения.
+            Твоя задача — не общий разговор и не пересказ сонника, а содержательная интерпретация сна.
+            Сначала читай сон как эмоциональную историю, а уже потом как набор символов.
+
+            Правила опоры:
+            - Главный источник смысла — текущий сон пользователя.
+            - Недавние сны являются только вторичным фоном и используются лишь тогда, когда мотивы явно повторяются.
+            - Нельзя подмешивать в ответ символы, места, персонажей и ключевые слова, которых нет в текущем сне.
+            - Если у тебя уже есть описание сна, пережитые чувства и выбранные пользователем ключевые слова, ты должен вернуть stage=INTERPRETED.
+            - Выбранные пользователем ключевые слова нужно учитывать как значимые опорные мотивы, а не как случайный список.
+            - Не заменяй сюжет сна абстрактными символами. Если в текущем сне нет воды, города, леса или поезда, не делай их центром ответа.
+
+            Приоритеты интерпретации:
+            1. Назови центральный конфликт, эмоциональный перелом и финал сна.
+            2. Если сон строится вокруг семьи, авторитета, стыда, обмана, ложного узнавания, угрозы безопасности или самозащиты, поставь эти темы выше абстрактной символики.
+            3. Используй символы, чтобы уточнять сюжет, а не подменять сюжет.
+            4. Связывай сон с чувствами, границами, доверием, уязвимостью, идентичностью и отношениями в реальной жизни.
+            5. Если во сне есть учитель, родитель, бывший партнер родителя, дом, страх, подруга или полиция, считай их значимыми фигурами сюжета.
+
+            Правила ответа:
+            - Пиши только по-русски.
+            - Не ставь психиатрических диагнозов и не давай медицинских заключений.
+            - Не упоминай книги, авторов, школы, сонники, Юнга, Фрейда, гештальт или какой-либо источник.
+            - Формулируй смыслы как бережные гипотезы, а не как окончательную истину.
+            - Верни только валидный JSON без markdown и без текста вне JSON.
+
+            Внутренняя проверка:
+            - Какая сцена делает человека более уязвимым?
+            - Кто здесь имеет власть, кто кажется знакомым, а кто становится ложным, опасным или вторгающимся?
+            - Где поднимаются стыд, грусть, страх, недоверие или облегчение?
+            - В какой точке возникает нарушение границ или угроза безопасности?
+            - Как человек пытается вернуть себе опору, поддержку или контроль?
+
+            Если деталей уже достаточно, интерпретация должна:
+            - начинаться с главного эмоционального конфликта;
+            - объяснять переход от знакомого к опасному, если он есть;
+            - связывать сон с отношениями, идентичностью, границами, доверием и безопасностью;
+            - завершаться осторожной гипотезой о том, чему этот сон может соответствовать в реальной жизни.
+
+            Если деталей недостаточно, верни stage=CLARIFYING и задай ровно один точный вопрос.
+
+            Формат ответа:
+            {
+              "stage": "CLARIFYING" | "INTERPRETED",
+              "assistantMessage": "string",
+              "title": "1-2 words",
+              "keywords": ["keyword1", "keyword2", "keyword3"],
+              "interpretation": "string"
+            }
+
+            Правила полей:
+            - title: 1-2 содержательных слова, передающих эмоциональное ядро сна.
+            - keywords: 2-6 ключевых мотивов из текущего сна и выбранных пользователем слов.
+            - assistantMessage: краткая подводка или один точный уточняющий вопрос.
+            - interpretation: полный разбор сна.
+
+            Выделенные мотивы текущего сна:
+            %s
+
+            Описание сна пользователя:
+            %s
+
+            Какие чувства пользователь испытывал во сне:
+            %s
+
+            Какие ключевые слова пользователь выбрал сам:
+            %s
+
+            Дополнительный контекст после выбора слов:
+            %s
+
+            Контекст знаний по интерпретации:
+            %s
+
+            Недавние сны за последнюю неделю, которые действительно могут быть связаны:
+            %s
+            """.formatted(
+            motifText,
+            fallbackSectionValue(snapshot.dreamDescription(), "нет"),
+            fallbackSectionValue(snapshot.emotionDescription(), "нет"),
+            snapshot.selectedKeywords().isEmpty() ? "нет" : String.join(", ", snapshot.selectedKeywords()),
+            fallbackSectionValue(snapshot.additionalContext(), "нет"),
+            fallbackSectionValue(ragContext, "нет"),
+            fallbackSectionValue(recentDreamsContext, "нет")
+        );
+    }
+
+    private String buildEnglishPrompt(
+        ConversationSnapshot snapshot,
+        String ragContext,
+        String recentDreamsContext,
+        String motifText
+    ) {
+        return """
+            You are an English-speaking psychotherapist who interprets dreams with care and precision.
             Your job is not generic conversation and not a dream-dictionary summary.
-            Read the current dream as an emotional story first.
+            Read the dream first as an emotional story and only then as a field of symbols.
 
             Grounding rules:
-            - The CURRENT dream is the primary evidence.
-            - Recent dreams are secondary background. Use them only if the same motifs clearly repeat.
-            - Never import symbols, places, or keywords from recent dreams if they are absent from the current dream.
-            - Keywords must come from the current dream itself.
-            - If the current dream already contains concrete people, setting, emotional shift, threat, and ending, interpret it directly and do not ask a follow-up question.
+            - The current dream is the main source of meaning.
+            - Recent dreams are only secondary background and should be used only when motifs clearly repeat.
+            - Do not import symbols, places, people, or keywords that are absent from the current dream.
+            - If you already have the dream description, the felt emotions, and the user-selected keywords, you should return stage=INTERPRETED.
+            - Treat the user-selected keywords as meaningful anchors, not as decorative extras.
+            - Do not replace the actual storyline with generic symbols. If the current dream does not contain water, a city, a forest, or a train, do not make them central.
 
             Interpretation priorities:
-            1. Identify the central conflict, emotional turning point, and ending.
-            2. If the dream is driven by family, authority, shame, deception, mistaken identity, safety threat, or protection, prioritize these themes over generic symbol reading.
-            3. Use symbols to support the plot, not replace the plot.
-            4. Link the dream to feelings, boundaries, trust, vulnerability, identity, and present-life relationships.
-            5. If the dream contains a teacher, parent, former partner, home, fear, friend, or police, treat them as meaningful relational signals, not random decoration.
+            1. Name the central conflict, emotional turning point, and ending.
+            2. If the dream is driven by family, authority, shame, deception, mistaken identity, safety threat, or self-protection, prioritize those themes over abstract symbolism.
+            3. Use symbols to sharpen the plot, not to replace the plot.
+            4. Connect the dream to feelings, boundaries, trust, vulnerability, identity, and present-life relationships.
+            5. If the dream contains a teacher, parent, a parent's former partner, a home, fear, a friend, or police, treat them as meaningful relational signals.
 
             Output rules:
-            - Write only in %s.
+            - Write only in English.
             - Do not diagnose psychiatric disorders and do not give medical conclusions.
             - Do not mention books, authors, schools, dream dictionaries, Jung, Freud, Gestalt, or any source.
-            - Present meanings as careful hypotheses, not as absolute truth.
+            - Present meanings as careful hypotheses, not absolute truth.
             - Return valid JSON only, without markdown and without text outside JSON.
 
             Internal checklist:
-            - What scene places the dreamer into a more vulnerable role?
+            - What scene makes the dreamer more vulnerable?
             - Who has power, who seems familiar, and who becomes false, dangerous, or intrusive?
             - Where do shame, grief, fear, mistrust, or relief rise?
-            - What moment marks a boundary violation or safety threat?
-            - How does the dreamer try to restore agency, support, or control?
+            - At what point do boundaries break or safety feel threatened?
+            - How does the dreamer try to restore support, agency, or control?
 
-            If there is enough detail, interpretation should:
+            If there is already enough detail, the interpretation should:
             - begin with the main emotional conflict;
             - explain the shift from familiarity to danger if it exists;
             - connect the dream to relationships, identity, boundaries, trust, and safety;
@@ -253,76 +340,95 @@ public class OllamaDreamAiService implements DreamAiService {
 
             Field rules:
             - title: 1-2 meaningful words capturing the emotional core.
-            - keywords: 2-3 key motifs from the current dream itself.
+            - keywords: 2-6 key motifs from the current dream and the user-selected words.
             - assistantMessage: a brief lead-in or one focused follow-up question.
             - interpretation: the full dream reading.
-            """.formatted(therapistLanguage, targetLanguage));
-        builder.append("\nCurrent dream motifs detected:\n").append(currentMotifs).append("\n\n");
-        builder.append("Current dream narrative (primary evidence):\n").append(currentNarrative).append("\n\n");
-        builder.append("Retrieved knowledge context:\n").append(ragContext).append("\n\n");
-        builder.append("Recent dreams from the last 7 days (secondary background only if clearly related):\n")
-            .append(recentDreamsContext)
-            .append("\n\n");
-        builder.append("Chat history:\n");
 
-        conversation.getMessages().stream()
-            .sorted(Comparator.comparing(DreamMessage::getCreatedAt))
-            .forEach(message -> builder.append(message.getRole().name()).append(": ").append(message.getContent()).append('\n'));
+            Detected motifs in the current dream:
+            %s
 
-        return builder.toString();
+            User dream description:
+            %s
+
+            Emotions the user felt in the dream:
+            %s
+
+            Keywords the user selected personally:
+            %s
+
+            Additional context after keyword selection:
+            %s
+
+            Dream interpretation knowledge context:
+            %s
+
+            Recent dreams from the last week that may actually be related:
+            %s
+            """.formatted(
+            motifText,
+            fallbackSectionValue(snapshot.dreamDescription(), "none"),
+            fallbackSectionValue(snapshot.emotionDescription(), "none"),
+            snapshot.selectedKeywords().isEmpty() ? "none" : String.join(", ", snapshot.selectedKeywords()),
+            fallbackSectionValue(snapshot.additionalContext(), "none"),
+            fallbackSectionValue(ragContext, "none"),
+            fallbackSectionValue(recentDreamsContext, "none")
+        );
     }
 
-    private String buildRecentDreamsContext(DreamConversation conversation, List<DreamConversation> recentDreams, String language) {
+    private String buildRecentDreamsContext(
+        ConversationSnapshot snapshot,
+        List<DreamConversation> recentDreams,
+        String language
+    ) {
         if (recentDreams == null || recentDreams.isEmpty()) {
-            return isEnglish(language)
-                ? "No clearly related recent dreams. Do not borrow motifs from other dreams."
-                : "Явно связанных недавних снов не найдено. Не подмешивайте мотивы из других снов.";
+            return fallbackSectionValue("", isEnglish(language) ? "none" : "нет");
         }
 
-        StringBuilder builder = new StringBuilder();
-        builder.append(buildRecurringDreamsObservation(conversation, recentDreams, language)).append('\n');
-
+        List<String> items = new ArrayList<>();
         for (DreamConversation recentDream : recentDreams) {
-            builder.append("- Title: ").append(formatDreamTitle(recentDream, language)).append('\n');
-            builder.append("  Stage: ").append(recentDream.getStage().name()).append('\n');
-            builder.append("  UpdatedAt: ").append(recentDream.getUpdatedAt()).append('\n');
-
-            List<String> keywords = keywordsForAnalysis(recentDream, language);
-            if (!keywords.isEmpty()) {
-                builder.append("  Keywords: ").append(String.join(", ", keywords)).append('\n');
-            }
-
-            String summary = summarizeConversation(recentDream);
-            if (StringUtils.hasText(summary)) {
-                builder.append("  Dream summary: ").append(summary).append('\n');
-            }
-
-            if (StringUtils.hasText(recentDream.getInterpretation())) {
-                builder.append("  Interpretation summary: ").append(trimExcerpt(recentDream.getInterpretation(), 220)).append('\n');
-            }
+            String item = isEnglish(language)
+                ? """
+                    - Title: %s
+                      Keywords: %s
+                      Meaning: %s
+                    """.formatted(
+                    firstNonBlank(recentDream.getTitle(), "Untitled"),
+                    recentDream.getKeywords().isEmpty() ? "none" : String.join(", ", recentDream.getKeywords()),
+                    summarizeText(firstNonBlank(recentDream.getInterpretation(), recentDreamSearchText(recentDream)), 180)
+                )
+                : """
+                    - Название: %s
+                      Ключевые слова: %s
+                      Смысл: %s
+                    """.formatted(
+                    firstNonBlank(recentDream.getTitle(), "Без названия"),
+                    recentDream.getKeywords().isEmpty() ? "нет" : String.join(", ", recentDream.getKeywords()),
+                    summarizeText(firstNonBlank(recentDream.getInterpretation(), recentDreamSearchText(recentDream)), 180)
+                );
+            items.add(item.trim());
         }
 
-        return builder.toString().trim();
+        return String.join("\n", items);
+    }
+
+    private String fallbackSectionValue(String value, String fallback) {
+        return StringUtils.hasText(value) ? value.trim() : fallback;
     }
 
     private URI buildGenerateUri() {
         String baseUrl = ollamaProperties.getBaseUrl();
         if (baseUrl.endsWith("/")) {
-            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+            return URI.create(baseUrl + "api/generate");
         }
         return URI.create(baseUrl + "/api/generate");
     }
 
     private String extractResponseText(String rawBody) {
         try {
-            OllamaGenerateResponse response = objectMapper.readValue(rawBody, OllamaGenerateResponse.class);
-            if (response != null && StringUtils.hasText(response.response())) {
-                return response.response();
-            }
-        } catch (Exception exception) {
-            log.debug("Could not deserialize Ollama response envelope directly, using raw body");
+            return objectMapper.readTree(rawBody).path("response").asText("");
+        } catch (Exception ignored) {
+            return "";
         }
-        return rawBody;
     }
 
     private String normalizeJson(String rawResponse) {
@@ -330,143 +436,124 @@ public class OllamaDreamAiService implements DreamAiService {
         if (trimmed.startsWith("```")) {
             trimmed = trimmed.replace("```json", "").replace("```", "").trim();
         }
+
+        int firstBrace = trimmed.indexOf('{');
+        int lastBrace = trimmed.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+            return trimmed.substring(firstBrace, lastBrace + 1);
+        }
         return trimmed;
     }
 
-    private List<String> sanitizeKeywords(List<String> rawKeywords, DreamConversation conversation, String language) {
-        List<String> thematicKeywords = extractKeywords(extractUserNarrativeVerbatim(conversation), language);
-        if (rawKeywords == null || rawKeywords.isEmpty()) {
-            return thematicKeywords;
+    private List<String> sanitizeKeywords(
+        List<String> rawKeywords,
+        ConversationSnapshot snapshot,
+        DreamConversation conversation,
+        String language
+    ) {
+        LinkedHashSet<String> keywords = new LinkedHashSet<>();
+        String narrative = extractCurrentNarrative(snapshot);
+
+        snapshot.selectedKeywords().forEach(keyword -> keywords.add(prettyKeyword(keyword)));
+        rawKeywords.stream()
+            .filter(StringUtils::hasText)
+            .map(this::prettyKeyword)
+            .filter(keyword -> isKeywordGrounded(keyword, narrative, snapshot.selectedKeywords()))
+            .forEach(keywords::add);
+        extractKeywords(narrative, language).forEach(keywords::add);
+        conversation.getKeywords().stream()
+            .map(this::prettyKeyword)
+            .filter(keyword -> isKeywordGrounded(keyword, narrative, snapshot.selectedKeywords()))
+            .forEach(keywords::add);
+
+        if (keywords.isEmpty()) {
+            keywords.add(isEnglish(language) ? "Dream" : "Сон");
+            keywords.add(isEnglish(language) ? "Emotion" : "Эмоция");
         }
 
-        String narrative = extractUserNarrative(conversation);
-        List<String> keywords = rawKeywords.stream()
-            .filter(StringUtils::hasText)
-            .map(String::trim)
-            .map(keyword -> keyword.toLowerCase(Locale.ROOT))
-            .filter(keyword -> !Set.of("сон", "символ", "образ", "чувство", "dream", "symbol", "emotion").contains(keyword))
-            .filter(keyword -> isKeywordGrounded(keyword, narrative, thematicKeywords))
-            .distinct()
-            .limit(3)
-            .toList();
-
-        return keywords.size() >= 2 ? keywords : thematicKeywords;
+        return keywords.stream().limit(6).toList();
     }
 
     private List<String> extractKeywords(String text, String language) {
-        LinkedHashSet<String> unique = new LinkedHashSet<>();
-        List<DetectedTheme> themes = detectThemes(text);
+        String normalizedText = firstNonBlank(text).toLowerCase(Locale.ROOT);
+        LinkedHashSet<String> keywords = new LinkedHashSet<>();
 
-        for (DetectedTheme theme : themes) {
-            if (unique.size() >= 3) {
+        addKeywordIfContains(keywords, normalizedText, language, "School", "Школа", "школ", "урок", "учител", "school", "teacher", "lesson");
+        addKeywordIfContains(keywords, normalizedText, language, "Father", "Отец", "отец", "отца", "отцом", "пап", "father", "dad");
+        addKeywordIfContains(keywords, normalizedText, language, "Former partner", "Бывшая партнерша", "бывш", "девушк", "former partner", "ex");
+        addKeywordIfContains(keywords, normalizedText, language, "Deception", "Обман", "обман", "заман", "ловуш", "ложн", "deception", "false", "trap");
+        addKeywordIfContains(keywords, normalizedText, language, "Recognition", "Узнавание", "узна", "recogn", "familiar");
+        addKeywordIfContains(keywords, normalizedText, language, "Home", "Дом", "дом", "квартир", "комнат", "home", "house");
+        addKeywordIfContains(keywords, normalizedText, language, "Fear", "Страх", "страх", "опас", "угроз", "тревог", "fear", "danger", "threat");
+        addKeywordIfContains(keywords, normalizedText, language, "Friend", "Подруга", "подруг", "friend");
+        addKeywordIfContains(keywords, normalizedText, language, "Police", "Полиция", "полици", "police");
+        addKeywordIfContains(keywords, normalizedText, language, "Shame", "Стыд", "стыд", "неловк", "shame", "embarrass");
+        addKeywordIfContains(keywords, normalizedText, language, "Trust", "Доверие", "довер", "недовер", "сомне", "trust", "mistrust");
+        addKeywordIfContains(keywords, normalizedText, language, "Protection", "Защита", "защит", "помощ", "звон", "protect", "help", "call");
+
+        for (String token : TOKEN_SPLIT_PATTERN.split(normalizedText)) {
+            if (!StringUtils.hasText(token) || token.length() < 4 || STOP_WORDS.contains(token)) {
+                continue;
+            }
+            keywords.add(prettyKeyword(token));
+            if (keywords.size() >= 6) {
                 break;
             }
-            unique.add(theme.label(language));
         }
 
-        if (unique.size() < 3) {
-            List<String> tokens = new ArrayList<>();
-            for (String token : TOKEN_SPLIT_PATTERN.split(text.toLowerCase(Locale.ROOT))) {
-                if (!StringUtils.hasText(token) || token.length() < 4 || STOP_WORDS.contains(token)) {
-                    continue;
-                }
-                tokens.add(token);
-            }
-
-            tokens.stream()
-                .sorted(Comparator.comparingInt(String::length).reversed())
-                .filter(token -> !TITLE_FILLER_WORDS.contains(token))
-                .forEach(token -> {
-                    if (unique.size() < 3) {
-                        unique.add(token);
-                    }
-                });
-        }
-
-        if (unique.isEmpty()) {
-            unique.add(isEnglish(language) ? "dream" : "сон");
-            unique.add(isEnglish(language) ? "emotion" : "эмоция");
-        }
-        return List.copyOf(unique);
+        return keywords.stream().limit(6).toList();
     }
 
-    private List<String> keywordsForAnalysis(DreamConversation conversation, String language) {
-        List<String> keywords = conversation.getKeywords().isEmpty()
-            ? extractKeywords(firstNonBlank(extractUserNarrativeVerbatim(conversation), conversation.getInterpretation()), language)
-            : sanitizeKeywords(conversation.getKeywords(), conversation, language);
-        return keywords.stream().filter(keyword -> !Set.of("сон", "символ", "dream", "symbol").contains(keyword)).toList();
-    }
-
-    private String buildRecurringDreamsObservation(DreamConversation conversation, List<DreamConversation> recentDreams, String language) {
-        List<String> currentKeywords = keywordsForAnalysis(conversation, language);
-        if (currentKeywords.isEmpty()) {
-            return isEnglish(language)
-                ? "Overlap scan: no clear motifs detected in the current dream yet."
-                : "Проверка перекличек: в текущем сне пока не выделились явные мотивы.";
-        }
-
-        List<String> matches = new ArrayList<>();
-        for (DreamConversation recentDream : recentDreams) {
-            List<String> sharedKeywords = findSharedKeywords(currentKeywords, recentDream, language);
-            if (!sharedKeywords.isEmpty()) {
-                matches.add("%s [%s]".formatted(formatDreamTitle(recentDream, language), String.join(", ", sharedKeywords)));
+    private void addKeywordIfContains(
+        LinkedHashSet<String> keywords,
+        String text,
+        String language,
+        String englishValue,
+        String russianValue,
+        String... markers
+    ) {
+        for (String marker : markers) {
+            if (text.contains(marker)) {
+                keywords.add(isEnglish(language) ? englishValue : russianValue);
+                return;
             }
         }
-
-        if (matches.isEmpty()) {
-            return isEnglish(language)
-                ? "Overlap scan: no clearly related recent dreams."
-                : "Проверка перекличек: явно связанных недавних снов не найдено.";
-        }
-
-        return isEnglish(language)
-            ? "Overlap scan: only the following recent dreams share strong motifs -> %s. Mention continuity only if it truly fits the current dream."
-                .formatted(String.join("; ", matches))
-            : "Проверка перекличек: только следующие недавние сны действительно разделяют сильные мотивы -> %s. Упоминайте повтор только если он правда подходит текущему сну."
-                .formatted(String.join("; ", matches));
     }
 
-    private String buildRecurringDreamsInsight(List<String> currentKeywords, List<DreamConversation> recentDreams, String language) {
-        if (recentDreams == null || recentDreams.isEmpty() || currentKeywords == null || currentKeywords.isEmpty()) {
-            return null;
+    private String chooseTitle(
+        String suggestedTitle,
+        List<String> keywords,
+        ConversationSnapshot snapshot,
+        String language
+    ) {
+        if (StringUtils.hasText(suggestedTitle) && !isWeakTitle(suggestedTitle, keywords)) {
+            return normalizeTitle(suggestedTitle);
         }
 
-        LinkedHashSet<String> recurringKeywords = new LinkedHashSet<>();
-        LinkedHashSet<String> relatedDreams = new LinkedHashSet<>();
-        for (DreamConversation recentDream : recentDreams) {
-            List<String> sharedKeywords = findSharedKeywords(currentKeywords, recentDream, language);
-            if (!sharedKeywords.isEmpty()) {
-                recurringKeywords.addAll(sharedKeywords);
-                relatedDreams.add(formatDreamTitle(recentDream, language));
+        String narrative = extractCurrentNarrative(snapshot).toLowerCase(Locale.ROOT);
+        if (containsAny(narrative, "школ", "урок", "учител", "school", "teacher", "lesson")
+            && containsAny(narrative, "отец", "отца", "отцом", "пап", "father", "dad")
+            && containsAny(narrative, "обман", "ложн", "заман", "deception", "false", "trap")) {
+            return isEnglish(language) ? "False recognition" : "Ложное узнавание";
+        }
+        if (containsAny(narrative, "страх", "опас", "угроз", "fear", "danger", "threat")
+            && containsAny(narrative, "полици", "подруг", "помощ", "звон", "police", "friend", "help", "call")) {
+            return isEnglish(language) ? "Call for help" : "Зов помощи";
+        }
+        if (containsAny(narrative, "дом", "квартир", "границ", "home", "house", "boundary")) {
+            return isEnglish(language) ? "Broken boundaries" : "Нарушенные границы";
+        }
+        if (!keywords.isEmpty()) {
+            if (keywords.size() >= 2 && keywords.get(0).length() + keywords.get(1).length() <= 26) {
+                return normalizeTitle("%s %s".formatted(keywords.get(0), keywords.get(1).toLowerCase(Locale.ROOT)));
             }
+            return normalizeTitle(keywords.get(0));
         }
-
-        if (recurringKeywords.isEmpty()) {
-            return null;
-        }
-        return isEnglish(language)
-            ? "Similar motifs have also appeared in recent dreams from the past week (%s): %s. This may suggest a recurring inner theme that the psyche is returning to."
-                .formatted(String.join(", ", relatedDreams), String.join(", ", recurringKeywords))
-            : "Похожие мотивы уже появлялись и в недавних снах за последнюю неделю (%s): %s. Это может указывать на повторяющуюся внутреннюю тему, к которой психика снова возвращается."
-                .formatted(String.join(", ", relatedDreams), String.join(", ", recurringKeywords));
-    }
-
-    private List<String> findSharedKeywords(List<String> currentKeywords, DreamConversation recentDream, String language) {
-        List<String> recentKeywords = keywordsForAnalysis(recentDream, language);
-        LinkedHashSet<String> sharedKeywords = new LinkedHashSet<>();
-        for (String currentKeyword : currentKeywords) {
-            String normalizedCurrentKeyword = currentKeyword.toLowerCase(Locale.ROOT);
-            for (String recentKeyword : recentKeywords) {
-                if (normalizedCurrentKeyword.equals(recentKeyword.toLowerCase(Locale.ROOT))) {
-                    sharedKeywords.add(normalizedCurrentKeyword);
-                }
-            }
-        }
-        return List.copyOf(sharedKeywords);
+        return defaultTitle(language);
     }
 
     private List<DreamConversation> selectRelevantRecentDreams(
-        DreamConversation conversation,
+        ConversationSnapshot snapshot,
         List<DreamConversation> recentDreams,
         String language
     ) {
@@ -474,241 +561,56 @@ public class OllamaDreamAiService implements DreamAiService {
             return List.of();
         }
 
-        List<DetectedTheme> currentThemes = detectThemes(firstNonBlank(extractUserNarrativeVerbatim(conversation), conversation.getInterpretation()));
-        List<String> currentKeywords = keywordsForAnalysis(conversation, language);
-        if (currentThemes.isEmpty() && currentKeywords.isEmpty()) {
-            return List.of();
-        }
-
-        List<RelatedDream> relatedDreams = new ArrayList<>();
-        for (DreamConversation recentDream : recentDreams) {
-            List<DetectedTheme> recentThemes = detectThemes(firstNonBlank(extractUserNarrativeVerbatim(recentDream), recentDream.getInterpretation()));
-            List<String> sharedKeywords = findSharedKeywords(currentKeywords, recentDream, language);
-            int sharedThemePriority = sharedThemePriority(currentThemes, recentThemes);
-            int score = sharedThemePriority + sharedKeywords.size() * 2;
-
-            if (score >= 6 || (sharedThemePriority >= 5 && !sharedKeywords.isEmpty())) {
-                relatedDreams.add(new RelatedDream(recentDream, score));
-            }
-        }
-
-        return relatedDreams.stream()
-            .sorted(Comparator.comparingInt(RelatedDream::score).reversed()
-                .thenComparing(relatedDream -> relatedDream.conversation().getUpdatedAt(), Comparator.reverseOrder()))
+        List<DetectedTheme> currentThemes = detectThemes(extractCurrentNarrative(snapshot));
+        return recentDreams.stream()
+            .map(dream -> new RelatedDream(dream, scoreRelatedDream(dream, currentThemes, snapshot.selectedKeywords())))
+            .filter(relatedDream -> relatedDream.score() > 0)
+            .sorted(Comparator.comparingInt(RelatedDream::score).reversed())
             .limit(3)
             .map(RelatedDream::conversation)
             .toList();
     }
 
-    private int sharedThemePriority(List<DetectedTheme> leftThemes, List<DetectedTheme> rightThemes) {
-        int total = 0;
-        for (DetectedTheme leftTheme : leftThemes) {
-            for (DetectedTheme rightTheme : rightThemes) {
-                if (leftTheme.id().equals(rightTheme.id())) {
-                    total += leftTheme.priority();
-                    break;
-                }
-            }
-        }
-        return total;
+    private int scoreRelatedDream(
+        DreamConversation dream,
+        List<DetectedTheme> currentThemes,
+        List<String> selectedKeywords
+    ) {
+        String recentText = recentDreamSearchText(dream);
+        List<DetectedTheme> recentThemes = detectThemes(recentText);
+        int sharedPriority = sharedThemePriority(currentThemes, recentThemes);
+        long sharedKeywords = selectedKeywords.stream()
+            .map(keyword -> keyword.toLowerCase(Locale.ROOT))
+            .filter(recentText::contains)
+            .count();
+        return sharedPriority * 10 + Math.toIntExact(sharedKeywords);
     }
 
-    private String mergeRecurringInsight(String interpretation, String recurringInsight, String language) {
-        if (!StringUtils.hasText(recurringInsight)) {
-            return interpretation;
-        }
-        if (!StringUtils.hasText(interpretation)) {
-            return recurringInsight;
+    private String buildRecurringDreamsInsight(List<String> keywords, List<DreamConversation> recentDreams, String language) {
+        if (recentDreams == null || recentDreams.isEmpty()) {
+            return "";
         }
 
-        String normalized = interpretation.toLowerCase(Locale.ROOT);
-        if (normalized.contains("повторя") || normalized.contains("переклика") || normalized.contains("recurr") || normalized.contains("returns to")) {
+        long relatedDreams = recentDreams.stream()
+            .filter(dream -> keywords.stream()
+                .map(keyword -> keyword.toLowerCase(Locale.ROOT))
+                .anyMatch(keyword -> recentDreamSearchText(dream).contains(keyword)))
+            .count();
+
+        if (relatedDreams == 0) {
+            return "";
+        }
+
+        return isEnglish(language)
+            ? "A related theme also appears in other recent dreams, so this may reflect a repeating emotional pattern rather than an isolated scene."
+            : "Похожая тема появляется и в других недавних снах, поэтому здесь может проявляться не случайный эпизод, а повторяющийся эмоциональный узор.";
+    }
+
+    private String mergeRecurringInsight(String interpretation, String recurringInsight) {
+        if (!StringUtils.hasText(recurringInsight) || interpretation.contains(recurringInsight)) {
             return interpretation;
         }
         return interpretation + " " + recurringInsight;
-    }
-
-    private String summarizeConversation(DreamConversation conversation) {
-        return trimExcerpt(extractUserNarrativeVerbatim(conversation), 220);
-    }
-
-    private String trimExcerpt(String text, int maxLength) {
-        if (!StringUtils.hasText(text)) {
-            return "";
-        }
-        String normalizedText = text.replaceAll("\\s+", " ").trim();
-        return normalizedText.length() <= maxLength ? normalizedText : normalizedText.substring(0, maxLength - 3).trim() + "...";
-    }
-
-    private String formatDreamTitle(DreamConversation conversation, String language) {
-        if (StringUtils.hasText(conversation.getTitle()) && !isPlaceholderTitle(conversation.getTitle())) {
-            return conversation.getTitle().trim();
-        }
-
-        List<String> keywords = keywordsForAnalysis(conversation, language);
-        if (!keywords.isEmpty()) {
-            return inferTitleFromConversation(conversation, keywords, language);
-        }
-        return isEnglish(language) ? "Recent dream" : "Недавний сон";
-    }
-
-    private String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (StringUtils.hasText(value)) {
-                return value;
-            }
-        }
-        return "";
-    }
-
-    private String buildTitleFromKeywords(List<String> keywords, String language) {
-        List<String> titleWords = keywords.stream()
-            .filter(StringUtils::hasText)
-            .map(String::trim)
-            .map(keyword -> keyword.toLowerCase(Locale.ROOT))
-            .filter(keyword -> !isWeakTitleWord(keyword))
-            .limit(2)
-            .toList();
-
-        if (titleWords.isEmpty()) {
-            return isEnglish(language) ? "New dream" : "Новый сон";
-        }
-
-        String joined = String.join(" ", titleWords);
-        return Character.toUpperCase(joined.charAt(0)) + joined.substring(1);
-    }
-
-    private String chooseTitle(String suggestedTitle, List<String> keywords, DreamConversation conversation, String language) {
-        String smartTitle = inferTitleFromConversation(conversation, keywords, language);
-        if (!StringUtils.hasText(suggestedTitle)) {
-            return smartTitle;
-        }
-        String normalizedSuggested = normalizeTitle(suggestedTitle);
-        return isWeakTitle(normalizedSuggested, keywords) ? smartTitle : normalizedSuggested;
-    }
-
-    private String inferTitleFromConversation(DreamConversation conversation, List<String> keywords, String language) {
-        String narrative = extractUserNarrative(conversation);
-        List<DetectedTheme> themes = detectThemes(narrative);
-
-        if (hasTheme(themes, "deception_false_identity") && hasTheme(themes, "fear_threat")) {
-            return isEnglish(language) ? "False Recognition" : "Ложное узнавание";
-        }
-        if (hasTheme(themes, "school_authority") && hasTheme(themes, "shame_grief")) {
-            return isEnglish(language) ? "School Shame" : "Школьный стыд";
-        }
-        if (hasTheme(themes, "family_identity") && hasTheme(themes, "school_authority")) {
-            return isEnglish(language) ? "Father's Trace" : "Отцовский след";
-        }
-        if (hasTheme(themes, "home_boundaries") && hasTheme(themes, "deception_false_identity")) {
-            return isEnglish(language) ? "Unsafe House" : "Чужой дом";
-        }
-        if (hasTheme(themes, "protection_help") && hasTheme(themes, "fear_threat")) {
-            return isEnglish(language) ? "Call for Help" : "Зов помощи";
-        }
-        if (matchesAny(narrative, "убег", "погон", "преслед", "бегу", "спаса")) {
-            return isEnglish(language) ? "Escape" : "Убегание";
-        }
-        if (matchesAny(narrative, "опазд", "спеш", "тороп", "поезд", "самолет", "автобус", "вокзал", "дорог", "ехать", "еду")) {
-            return matchesAny(narrative, "трев", "страх", "паник", "боюсь")
-                ? (isEnglish(language) ? "Anxious Road" : "Тревожная дорога")
-                : (isEnglish(language) ? "Rush" : "Спешка");
-        }
-        if (matchesAny(narrative, "двер", "замок", "ключ")) {
-            return isEnglish(language) ? "Closed Door" : "Закрытая дверь";
-        }
-        if (matchesAny(narrative, "дом", "квартир", "комнат")) {
-            return matchesAny(narrative, "стар", "детств", "родител")
-                ? (isEnglish(language) ? "Old House" : "Старый дом")
-                : (isEnglish(language) ? "Home" : "Дом");
-        }
-        if (matchesAny(narrative, "лес", "темн", "ноч", "тень")) {
-            return matchesAny(narrative, "лес")
-                ? (isEnglish(language) ? "Dark Forest" : "Темный лес")
-                : (isEnglish(language) ? "Night Anxiety" : "Ночная тревога");
-        }
-        if (matchesAny(narrative, "вода", "море", "река", "волна", "дожд")) {
-            return matchesAny(narrative, "дом")
-                ? (isEnglish(language) ? "Home by Water" : "Дом у воды")
-                : (isEnglish(language) ? "Deep Water" : "Глубокая вода");
-        }
-        if (matchesAny(narrative, "пад", "провал", "вниз")) {
-            return isEnglish(language) ? "Falling" : "Падение";
-        }
-        if (matchesAny(narrative, "лестниц", "лифт", "этаж", "подним")) {
-            return isEnglish(language) ? "Ascent" : "Подъем";
-        }
-        if (matchesAny(narrative, "мост", "дорог", "путь")) {
-            return isEnglish(language) ? "Crossing" : "Переход";
-        }
-        return buildTitleFromKeywords(keywords, language);
-    }
-
-    private long countUserMessages(DreamConversation conversation) {
-        return conversation.getMessages().stream().filter(message -> message.getRole() == ChatRole.USER).count();
-    }
-
-    private String extractUserNarrative(DreamConversation conversation) {
-        return extractUserNarrativeVerbatim(conversation).toLowerCase(Locale.ROOT);
-    }
-
-    private String extractUserNarrativeVerbatim(DreamConversation conversation) {
-        return conversation.getMessages().stream()
-            .filter(message -> message.getRole() == ChatRole.USER)
-            .map(DreamMessage::getContent)
-            .reduce("", (left, right) -> left + " " + right)
-            .trim();
-    }
-
-    private boolean isWeakTitle(String title, List<String> keywords) {
-        String normalized = title.toLowerCase(Locale.ROOT);
-        String[] words = normalized.split("\\s+");
-
-        if (!StringUtils.hasText(normalized) || "новый сон".equals(normalized) || "new dream".equals(normalized)) {
-            return true;
-        }
-        if (normalized.contains("сон") || normalized.contains("символ") || normalized.contains("образ")
-            || normalized.contains("dream") || normalized.contains("symbol")) {
-            return true;
-        }
-        if (words.length > 2 || !normalized.matches("(?iu)[\\p{L}\\p{N}-]+(?:\\s+[\\p{L}\\p{N}-]+)?")) {
-            return true;
-        }
-        for (String word : words) {
-            if (isWeakTitleWord(word)) {
-                return true;
-            }
-        }
-        if (words.length == 2 && words[0].equals(words[1])) {
-            return true;
-        }
-        return keywords.stream().map(keyword -> keyword.toLowerCase(Locale.ROOT)).anyMatch(normalized::equals);
-    }
-
-    private boolean isWeakTitleWord(String word) {
-        String normalizedWord = word.toLowerCase(Locale.ROOT);
-        return STOP_WORDS.contains(normalizedWord)
-            || TITLE_FILLER_WORDS.contains(normalizedWord)
-            || TITLE_GENERIC_WORDS.contains(normalizedWord);
-    }
-
-    private String normalizeTitle(String title) {
-        String collapsed = title.trim().replaceAll("\\s+", " ");
-        return Character.toUpperCase(collapsed.charAt(0)) + collapsed.substring(1);
-    }
-
-    private boolean isPlaceholderTitle(String title) {
-        String normalized = title.trim().toLowerCase(Locale.ROOT);
-        return "новый сон".equals(normalized) || "new dream".equals(normalized);
-    }
-
-    private boolean matchesAny(String text, String... fragments) {
-        for (String fragment : fragments) {
-            if (text.contains(fragment)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private String sanitizeOutputText(String text) {
@@ -717,93 +619,84 @@ public class OllamaDreamAiService implements DreamAiService {
         }
 
         return text
-            .replaceAll("(?iu)по\\s+мотивам\\s+сонника\\s+миллера[:,]?\\s*", "")
-            .replaceAll("(?iu)по\\s+соннику\\s+миллера[:,]?\\s*", "")
-            .replaceAll("(?iu)according\\s+to\\s+(the\\s+)?dream\\s+book[:,]?\\s*", "")
             .replaceAll("(?iu)according\\s+to\\s+(jung|freud|miller|gestalt)[:,]?\\s*", "")
-            .replaceAll("(?iu)сонник\\s+миллера", "символическая трактовка")
-            .replaceAll("(?iu)dream\\s+dictionary", "symbolic reading")
-            .replaceAll("(?iu)миллер(?:а|у|ом|е)?", "")
-            .replaceAll("(?iu)miller'?s?", "")
-            .replaceAll("(?iu)юнг(?:а|у|ом|е|овский|овская|овское)?", "глубинный")
-            .replaceAll("(?iu)jung(?:ian)?", "depth-oriented")
-            .replaceAll("(?iu)фрейд(?:а|у|ом|е|овский|овская|овское)?", "внутренний")
-            .replaceAll("(?iu)freud(?:ian)?", "inner")
-            .replaceAll("(?iu)гештальт(?:-подход| подход)?", "внутренний диалог")
-            .replaceAll("(?iu)gestalt", "inner-dialogue")
-            .replaceAll("(?iu)источник(?:а|у|ом|е|и)?", "")
-            .replaceAll("(?iu)source(?:s)?", "")
+            .replaceAll("(?iu)according\\s+to\\s+(the\\s+)?dream\\s+dictionary[:,]?\\s*", "")
+            .replaceAll("(?iu)по\\s+соннику[:,]?\\s*", "")
+            .replaceAll("(?iu)по\\s+мнению\\s+(юнга|фрейда)[:,]?\\s*", "")
+            .replaceAll("(?iu)jung(?:ian)?", "")
+            .replaceAll("(?iu)freud(?:ian)?", "")
+            .replaceAll("(?iu)gestalt", "")
+            .replaceAll("(?iu)юнг(?:а|у|ом|е)?", "")
+            .replaceAll("(?iu)фрейд(?:а|у|ом|е)?", "")
+            .replaceAll("(?iu)гештальт", "")
             .replaceAll("\\s{2,}", " ")
             .replaceAll("\\s+([,.!?])", "$1")
             .trim();
     }
 
-    private String normalizeLanguage(String language) {
-        return "en".equalsIgnoreCase(language) ? "en" : "ru";
-    }
-
-    private boolean isEnglish(String language) {
-        return "en".equalsIgnoreCase(language);
-    }
-
     private String clarifyingQuestion(String language) {
         return isEnglish(language)
-            ? "What stood out most strongly in this dream: the person, the shift into danger, or the moment you tried to protect yourself?"
-            : "Что в этом сне выделяется сильнее всего: человек, момент перехода к опасности или тот момент, когда вы начали защищать себя?";
+            ? "What stands out most strongly in this dream: the person, the emotional shift, or the moment you tried to protect yourself?"
+            : "Что в этом сне выделяется сильнее всего: человек, эмоциональный перелом или момент, когда вы начали защищать себя?";
     }
 
-    private String fallbackInterpretation(DreamConversation conversation, List<String> keywords, String language) {
-        List<DetectedTheme> themes = detectThemes(extractUserNarrative(conversation));
+    private String fallbackInterpretation(ConversationSnapshot snapshot, List<String> keywords, String language) {
+        String narrative = extractCurrentNarrative(snapshot).toLowerCase(Locale.ROOT);
+        List<DetectedTheme> themes = detectThemes(narrative);
         List<String> parts = new ArrayList<>();
 
         if (hasTheme(themes, "school_authority") && hasTheme(themes, "family_identity")) {
             parts.add(isEnglish(language)
-                ? "The dream places you back into a school-like, evaluative situation while tying it to your father and his history. This can be read as a return to a more vulnerable role where identity, family loyalty, and an older emotional story are being stirred up together."
-                : "Сон помещает вас обратно в школьную, оценивающую ситуацию и одновременно связывает ее с фигурой отца и его историей. Это похоже на возвращение в более уязвимую роль, где одновременно поднимаются тема идентичности, семейной лояльности и старая эмоциональная память.");
+                ? "The dream places you back into a school-like, evaluative role while tying that vulnerable position to your father and the family story around him."
+                : "Сон возвращает вас в школьную, оценивающую роль и одновременно связывает эту уязвимую позицию с фигурой отца и семейной историей вокруг него.");
         } else if (hasTheme(themes, "school_authority")) {
             parts.add(isEnglish(language)
-                ? "The school setting suggests a return to a position where you are being examined, evaluated, or made emotionally smaller than you are in waking life."
-                : "Школьная сцена похожа на возвращение в позицию, где вас будто снова оценивают, проверяют или делают эмоционально меньше, чем вы есть в обычной жизни.");
+                ? "The school setting suggests a return to a place of examination, hierarchy, and emotional vulnerability."
+                : "Школьная сцена похожа на возвращение в пространство проверки, иерархии и эмоциональной уязвимости.");
         }
 
         if (hasTheme(themes, "deception_false_identity")) {
             parts.add(hasTheme(themes, "home_boundaries")
                 ? (isEnglish(language)
-                    ? "What begins as something familiar then turns false and dangerous, and the move into someone else's home strengthens the theme of violated boundaries. The dream seems to track the moment when recognition breaks down and trust suddenly collapses."
-                    : "То, что сначала выглядит знакомым, затем оказывается ложным и опасным, а переход в чужой дом усиливает тему нарушения границ. Сон как будто отслеживает тот момент, когда узнавание ломается, а доверие резко рушится.")
+                    ? "Something that first feels familiar then turns false and dangerous, and the movement into someone else's home strengthens the theme of violated boundaries and collapsing trust."
+                    : "То, что сначала выглядит знакомым, затем оказывается ложным и опасным, а переход в чужой дом усиливает тему нарушения границ и разрушающегося доверия.")
                 : (isEnglish(language)
-                    ? "The false or deceptive figure suggests an inner experience in which something first feels known and safe, then reveals itself as misleading, intrusive, or unsafe."
-                    : "Ложная или обманчивая фигура во сне похожа на внутренний опыт, где что-то сначала ощущается знакомым и безопасным, а затем проявляется как вводящее в заблуждение, вторгающееся или небезопасное."));
+                    ? "The false figure suggests an experience in which the familiar becomes unsafe and recognition stops feeling reliable."
+                    : "Ложная фигура указывает на опыт, в котором знакомое становится небезопасным, а узнавание перестает давать опору."));
         }
 
         if (hasTheme(themes, "shame_grief")) {
             parts.add(isEnglish(language)
-                ? "The sadness and shame matter here just as much as the fear. They suggest that this dream is not only about danger, but also about an old relational wound, awkward recognition, and feelings that may still be tied to the family past."
-                : "Грусть и стыд здесь важны не меньше страха. Они подсказывают, что этот сон не только про опасность, но и про старую рану в отношениях, неловкое узнавание и чувства, которые до сих пор связаны с семейным прошлым.");
+                ? "Shame and sadness matter here as much as fear, because they point to an older relational wound rather than a random threat scene."
+                : "Стыд и грусть здесь не менее важны, чем страх, потому что они указывают не на случайную угрозу, а на более старую рану в отношениях.");
         }
 
         if (hasTheme(themes, "fear_threat") && hasTheme(themes, "protection_help")) {
             parts.add(isEnglish(language)
-                ? "The ending is important because you do not remain helpless: you call for help. That points not only to vulnerability, but also to a preserved capacity to recognize danger, seek support, and restore control."
-                : "Финал особенно важен тем, что вы не остаетесь беспомощной: вы зовете помощь. Это говорит не только об уязвимости, но и о сохраненной способности распознавать опасность, искать опору и возвращать себе контроль.");
-        } else if (hasTheme(themes, "fear_threat")) {
-            parts.add(isEnglish(language)
-                ? "The growing fear suggests that the dream is tracking a threat to safety, trust, or psychological space rather than offering a neutral symbolic scene."
-                : "Нарастающий страх показывает, что сон отслеживает угрозу безопасности, доверию или психологическому пространству, а не просто рисует нейтральную символическую сцену.");
+                ? "The ending matters because you do not stay helpless: you call for support and try to restore safety and control."
+                : "Финал особенно важен тем, что вы не остаетесь беспомощной: зовете поддержку и пытаетесь вернуть себе безопасность и контроль.");
         }
 
         if (parts.isEmpty()) {
             String joinedKeywords = String.join(", ", keywords);
             return isEnglish(language)
-                ? "The dream seems to center on the motifs %s. It may be more helpful to read these details not as isolated symbols but as one emotional story about tension, mistrust, vulnerability, and the need to restore safety and control."
+                ? "The dream gathers around %s. It reads less like a set of random symbols and more like an emotional story about trust, boundaries, vulnerability, and the need to regain safety."
                     .formatted(joinedKeywords)
-                : "Похоже, что в центре этого сна стоят мотивы %s. Здесь важнее не отдельные символы сами по себе, а эмоциональная история сна: напряжение, недоверие, уязвимость и попытка вернуть себе безопасность и контроль."
+                : "В центре сна оказываются %s. Здесь полезнее видеть не набор случайных символов, а эмоциональную историю о доверии, границах, уязвимости и попытке вернуть себе чувство безопасности."
                     .formatted(joinedKeywords);
         }
 
+        if (!snapshot.selectedKeywords().isEmpty()) {
+            parts.add(isEnglish(language)
+                ? "The user-selected keywords reinforce the same line of meaning: %s."
+                    .formatted(String.join(", ", snapshot.selectedKeywords()))
+                : "Выбранные пользователем ключевые слова поддерживают ту же линию смысла: %s."
+                    .formatted(String.join(", ", snapshot.selectedKeywords())));
+        }
+
         parts.add(isEnglish(language)
-            ? "As a waking-life hypothesis, the dream may be touching a place where old family material still makes you feel exposed, but where you now have more ability to notice danger and protect your boundaries."
-            : "Как гипотеза для бодрствующей жизни, сон может касаться той точки, где старый семейный материал все еще делает вас уязвимой, но теперь у вас больше способности замечать опасность и защищать свои границы.");
+            ? "A careful waking-life hypothesis is that this dream touches a place where old relational or family material still feels exposing, but where you already have more capacity to notice danger and protect your boundaries."
+            : "Как бережная гипотеза для бодрствующей жизни, сон может касаться той точки, где старый семейный или связанный с отношениями опыт все еще делает человека уязвимым, но вместе с этим показывает и большую способность замечать опасность и защищать свои границы.");
 
         return String.join(" ", parts);
     }
@@ -812,70 +705,58 @@ public class OllamaDreamAiService implements DreamAiService {
         OllamaAnalysisPayload payload,
         String title,
         List<String> keywords,
-        String assistantMessage,
         String interpretation,
-        DreamConversation conversation,
-        String language
+        ConversationSnapshot snapshot
     ) {
-        String narrative = extractUserNarrative(conversation);
+        String narrative = extractCurrentNarrative(snapshot);
         List<DetectedTheme> currentThemes = detectThemes(narrative);
         if (currentThemes.isEmpty()) {
             return false;
         }
 
-        String responseText = String.join(
-            " ",
-            firstNonBlank(title),
-            String.join(" ", keywords),
-            firstNonBlank(payload.assistantMessage(), assistantMessage),
-            interpretation
-        ).toLowerCase(Locale.ROOT);
-
+        String responseText = String.join(" ", firstNonBlank(title), String.join(" ", keywords), firstNonBlank(payload.assistantMessage()), interpretation)
+            .toLowerCase(Locale.ROOT);
         List<DetectedTheme> responseThemes = detectThemes(responseText);
-        int sharedThemePriority = sharedThemePriority(currentThemes, responseThemes);
         boolean hasSpecificCurrentTheme = currentThemes.stream().anyMatch(theme -> theme.priority() >= 4);
-        long groundedKeywords = keywords.stream().filter(keyword -> isKeywordGrounded(keyword, narrative, keywords)).count();
+        long groundedKeywords = keywords.stream()
+            .filter(keyword -> isKeywordGrounded(keyword, narrative, snapshot.selectedKeywords()))
+            .count();
 
-        if (hasSpecificCurrentTheme && sharedThemePriority < 4) {
+        if (hasSpecificCurrentTheme && sharedThemePriority(currentThemes, responseThemes) < 4) {
             return true;
         }
         if (keywords.size() >= 2 && groundedKeywords < 2) {
             return true;
         }
-        return introducesUnexpectedGenericMotifs(responseText, narrative) && sharedThemePriority < 5;
+        return introducesUnexpectedGenericMotifs(responseText, narrative);
     }
 
-    private boolean hasEnoughDetailForInterpretation(DreamConversation conversation) {
-        String narrative = extractUserNarrative(conversation);
-        return narrative.length() >= 320 || (narrative.length() >= 180 && detectThemes(narrative).size() >= 4);
-    }
-
-    private boolean isKeywordGrounded(String keyword, String narrative, List<String> thematicKeywords) {
-        if (narrative.contains(keyword)) {
+    private boolean isKeywordGrounded(String keyword, String narrative, List<String> selectedKeywords) {
+        String normalizedKeyword = keyword.toLowerCase(Locale.ROOT);
+        if (narrative.contains(normalizedKeyword)) {
             return true;
         }
-        return thematicKeywords.stream().anyMatch(themeKeyword -> themeKeyword.equalsIgnoreCase(keyword));
+        return selectedKeywords.stream().map(value -> value.toLowerCase(Locale.ROOT)).anyMatch(normalizedKeyword::equals);
     }
 
     private boolean introducesUnexpectedGenericMotifs(String responseText, String narrative) {
-        int introduced = 0;
         for (String marker : GENERIC_SYMBOL_MARKERS) {
             if (responseText.contains(marker) && !narrative.contains(marker)) {
-                introduced++;
+                return true;
             }
         }
-        return introduced >= 1;
+        return false;
     }
 
-    private String formatDetectedMotifs(DreamConversation conversation, String language) {
-        List<DetectedTheme> themes = detectThemes(extractUserNarrativeVerbatim(conversation));
+    private String formatDetectedMotifs(ConversationSnapshot snapshot, String language) {
+        List<DetectedTheme> themes = detectThemes(extractCurrentNarrative(snapshot));
         if (themes.isEmpty()) {
             return isEnglish(language) ? "none" : "нет";
         }
 
         LinkedHashSet<String> labels = new LinkedHashSet<>();
         for (DetectedTheme theme : themes) {
-            if (labels.size() >= 5) {
+            if (labels.size() >= 6) {
                 break;
             }
             labels.add(theme.label(language));
@@ -885,7 +766,7 @@ public class OllamaDreamAiService implements DreamAiService {
 
     private List<DetectedTheme> detectThemes(String text) {
         String normalizedText = firstNonBlank(text).toLowerCase(Locale.ROOT);
-        List<DetectedTheme> detectedThemes = new ArrayList<>();
+        List<DetectedTheme> themes = new ArrayList<>();
 
         for (ThemeDefinition definition : THEME_DEFINITIONS) {
             int markerMatches = 0;
@@ -895,18 +776,164 @@ public class OllamaDreamAiService implements DreamAiService {
                 }
             }
             if (markerMatches > 0) {
-                detectedThemes.add(new DetectedTheme(definition, definition.priority() * 10 + markerMatches));
+                themes.add(new DetectedTheme(definition, definition.priority() * 10 + markerMatches));
             }
         }
 
-        return detectedThemes.stream()
+        return themes.stream()
             .sorted(Comparator.comparingInt(DetectedTheme::score).reversed()
                 .thenComparing(theme -> theme.definition().id()))
             .toList();
     }
 
+    private int sharedThemePriority(List<DetectedTheme> left, List<DetectedTheme> right) {
+        int best = 0;
+        for (DetectedTheme leftTheme : left) {
+            for (DetectedTheme rightTheme : right) {
+                if (leftTheme.id().equals(rightTheme.id())) {
+                    best = Math.max(best, leftTheme.priority());
+                }
+            }
+        }
+        return best;
+    }
+
     private boolean hasTheme(List<DetectedTheme> themes, String themeId) {
         return themes.stream().anyMatch(theme -> theme.id().equals(themeId));
+    }
+
+    private ConversationSnapshot buildSnapshot(DreamConversation conversation, String language) {
+        List<String> userMessages = conversation.getMessages().stream()
+            .filter(message -> message.getRole() == ChatRole.USER)
+            .map(DreamMessage::getContent)
+            .toList();
+
+        String dreamDescription = userMessages.size() >= 1 ? userMessages.get(0).trim() : "";
+        String emotionDescription = userMessages.size() >= 2 ? userMessages.get(1).trim() : "";
+        String rawKeywordSelection = userMessages.size() >= 3 ? userMessages.get(2).trim() : "";
+        List<String> selectedKeywords = parseSelectedKeywords(rawKeywordSelection, language);
+        String additionalContext = userMessages.size() <= 3 ? "" : String.join("\n", userMessages.subList(3, userMessages.size())).trim();
+
+        return new ConversationSnapshot(
+            dreamDescription,
+            emotionDescription,
+            selectedKeywords,
+            additionalContext,
+            StringUtils.hasText(dreamDescription) && StringUtils.hasText(emotionDescription) && !selectedKeywords.isEmpty()
+        );
+    }
+
+    private List<String> parseSelectedKeywords(String rawKeywordSelection, String language) {
+        LinkedHashSet<String> selectedKeywords = new LinkedHashSet<>();
+
+        for (String fragment : rawKeywordSelection.split("[,;\\n]+")) {
+            String value = fragment.trim();
+            if (value.length() >= 2) {
+                selectedKeywords.add(prettyKeyword(value));
+            }
+        }
+
+        if (selectedKeywords.isEmpty()) {
+            selectedKeywords.addAll(extractKeywords(rawKeywordSelection, language));
+        }
+
+        return selectedKeywords.stream().limit(6).toList();
+    }
+
+    private String extractCurrentNarrative(ConversationSnapshot snapshot) {
+        return String.join(
+            "\n",
+            firstNonBlank(snapshot.dreamDescription()),
+            firstNonBlank(snapshot.emotionDescription()),
+            firstNonBlank(snapshot.additionalContext())
+        ).trim();
+    }
+
+    private String recentDreamSearchText(DreamConversation conversation) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(firstNonBlank(conversation.getTitle())).append(' ');
+        builder.append(firstNonBlank(conversation.getInterpretation())).append(' ');
+        if (conversation.getKeywords() != null) {
+            builder.append(String.join(" ", conversation.getKeywords())).append(' ');
+        }
+        conversation.getMessages().stream()
+            .filter(message -> message.getRole() == ChatRole.USER)
+            .map(DreamMessage::getContent)
+            .forEach(content -> builder.append(content).append(' '));
+        return builder.toString().toLowerCase(Locale.ROOT);
+    }
+
+    private String summarizeText(String value, int maxLength) {
+        String normalized = firstNonBlank(value).replaceAll("\\s+", " ").trim();
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+        return normalized.substring(0, maxLength).trim() + "...";
+    }
+
+    private String prettyKeyword(String keyword) {
+        String normalized = firstNonBlank(keyword).trim().replaceAll("\\s+", " ");
+        if (!StringUtils.hasText(normalized)) {
+            return normalized;
+        }
+        return Character.toUpperCase(normalized.charAt(0)) + normalized.substring(1);
+    }
+
+    private boolean isWeakTitle(String title, List<String> keywords) {
+        String normalized = title.trim().toLowerCase(Locale.ROOT);
+        if (!StringUtils.hasText(normalized) || isPlaceholderTitle(normalized)) {
+            return true;
+        }
+
+        String[] words = normalized.split("\\s+");
+        if (words.length > 2) {
+            return true;
+        }
+        for (String word : words) {
+            if (STOP_WORDS.contains(word) || TITLE_FILLER_WORDS.contains(word) || TITLE_GENERIC_WORDS.contains(word)) {
+                return true;
+            }
+        }
+        return keywords.stream().map(keyword -> keyword.toLowerCase(Locale.ROOT)).anyMatch(normalized::equals);
+    }
+
+    private String normalizeTitle(String title) {
+        String normalized = firstNonBlank(title).trim().replaceAll("\\s+", " ");
+        return Character.toUpperCase(normalized.charAt(0)) + normalized.substring(1);
+    }
+
+    private boolean isPlaceholderTitle(String title) {
+        return "новый сон".equals(title) || "new dream".equals(title);
+    }
+
+    private String defaultTitle(String language) {
+        return isEnglish(language) ? "New dream" : "Новый сон";
+    }
+
+    private boolean containsAny(String text, String... fragments) {
+        for (String fragment : fragments) {
+            if (text.contains(fragment)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return value.trim();
+            }
+        }
+        return "";
+    }
+
+    private String normalizeLanguage(String language) {
+        return "en".equalsIgnoreCase(language) ? "en" : "ru";
+    }
+
+    private boolean isEnglish(String language) {
+        return "en".equalsIgnoreCase(language);
     }
 
     private record ThemeDefinition(
@@ -936,5 +963,35 @@ public class OllamaDreamAiService implements DreamAiService {
     }
 
     private record RelatedDream(DreamConversation conversation, int score) {
+    }
+
+    private record ConversationSnapshot(
+        String dreamDescription,
+        String emotionDescription,
+        List<String> selectedKeywords,
+        String additionalContext,
+        boolean readyForInterpretation
+    ) {
+    }
+
+    private record OllamaGenerateRequest(
+        String model,
+        String prompt,
+        boolean stream,
+        String format
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record OllamaAnalysisPayload(
+        String stage,
+        String assistantMessage,
+        String title,
+        List<String> keywords,
+        String interpretation
+    ) {
+        public List<String> keywords() {
+            return keywords == null ? List.of() : keywords;
+        }
     }
 }

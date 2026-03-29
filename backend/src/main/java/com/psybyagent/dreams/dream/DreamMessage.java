@@ -9,6 +9,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -33,15 +34,21 @@ public class DreamMessage extends AuditableEntity {
 
     public static DreamMessage assistant(String content) {
         DreamMessage message = new DreamMessage();
+        Instant now = Instant.now();
         message.setRole(ChatRole.ASSISTANT);
         message.setContent(content);
+        message.setCreatedAt(now);
+        message.setUpdatedAt(now);
         return message;
     }
 
     public static DreamMessage user(String content) {
         DreamMessage message = new DreamMessage();
+        Instant now = Instant.now();
         message.setRole(ChatRole.USER);
         message.setContent(content);
+        message.setCreatedAt(now);
+        message.setUpdatedAt(now);
         return message;
     }
 }

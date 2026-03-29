@@ -124,5 +124,23 @@
     "tags": ["clarifying", "rich narrative", "detail", "follow-up", "уточнение", "подробный сон", "детали"],
     "contentRu": "Если в рассказе уже есть обстановка, значимые люди, эмоциональный перелом, чувство угрозы и финал, такого материала достаточно для первичной интерпретации. В этом случае лучше интерпретировать сон напрямую, а не уходить в лишний уточняющий вопрос.",
     "contentEn": "If the narrative already contains a setting, meaningful people, an emotional turning point, a sense of threat, and an ending, there is enough material for a first interpretation. In that case, interpret the dream directly instead of asking an unnecessary follow-up question."
+  },
+  {
+    "id": "emotion-attunement",
+    "title": "Emotions are not decoration",
+    "priority": 117,
+    "alwaysInclude": true,
+    "tags": ["emotion", "feeling", "affect", "страх", "стыд", "грусть", "тревога", "эмоции"],
+    "contentRu": "Пережитые во сне чувства нужно использовать как центральную опору интерпретации. Если человек называет страх, стыд, грусть, облегчение, растерянность или недоверие, эти эмоции должны помогать объяснить главный конфликт сна, а не оставаться второстепенной деталью.",
+    "contentEn": "The emotions felt inside the dream should be treated as central evidence. If the dreamer reports fear, shame, sadness, relief, confusion, or mistrust, those feelings should help explain the main conflict rather than remain a secondary detail."
+  },
+  {
+    "id": "user-selected-keywords",
+    "title": "User-selected motifs matter",
+    "priority": 116,
+    "alwaysInclude": true,
+    "tags": ["keywords", "selection", "motifs", "ключевые слова", "выбор", "мотивы"],
+    "contentRu": "Если пользователь сам выбрал ключевые слова или предметы сна, их нужно считать подтвержденными опорными мотивами. Они помогают удерживать ответ внутри реального сюжета сна и не дают модели уходить в посторонние символы, которых человек не выделял.",
+    "contentEn": "If the user personally selected keywords or dream objects, treat them as confirmed anchor motifs. They help keep the interpretation grounded in the actual dream narrative and prevent the model from drifting into unrelated symbols."
   }
 ]

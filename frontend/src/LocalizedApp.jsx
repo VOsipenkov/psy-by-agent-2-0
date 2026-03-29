@@ -33,7 +33,6 @@ export default function LocalizedApp() {
   const [deletingDream, setDeletingDream] = useState(false);
   const [pendingDreamIds, setPendingDreamIds] = useState([]);
   const [error, setError] = useState('');
-  const [dreamToDelete, setDreamToDelete] = useState(null);
   const [isMockMode, setIsMockMode] = useState(() => isMockApiEnabled());
   const [profileImage, setProfileImage] = useState(() => readProfileImage(readStoredUser()?.id));
   const [customDreamOrder, setCustomDreamOrder] = useState(() => readDreamOrder(readStoredUser()?.id));
@@ -42,10 +41,13 @@ export default function LocalizedApp() {
   const timelineEndRef = useRef(null);
   const profileImageInputRef = useRef(null);
   const activeDreamIdRef = useRef(null);
+  const dreamLoadRequestRef = useRef(0);
 
   const copy = useMemo(() => getUiCopy(language), [language]);
   const orderedDreams = useMemo(() => applyDreamOrder(dreams, customDreamOrder), [dreams, customDreamOrder]);
   const activeDreamPending = activeDream?.id ? pendingDreamIds.includes(activeDream.id) : false;
+  const keywordSelectionActive = activeDream?.stage === 'SELECTING_KEYWORDS';
+  const selectedComposerKeywords = useMemo(() => parseComposerKeywords(draftMessage), [draftMessage]);
 
   useEffect(() => {
     writeStoredLanguage(language);
@@ -90,23 +92,17 @@ export default function LocalizedApp() {
     });
   }, [activeDream?.id, activeDream?.messages?.length]);
 
-  useEffect(() => {
-    if (!dreamToDelete) {
-      return undefined;
-    }
-
-    function handleEscape(event) {
-      if (event.key === 'Escape') {
-        setDreamToDelete(null);
-      }
-    }
-
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [dreamToDelete]);
-
   function syncApiMode() {
     setIsMockMode(isMockApiEnabled());
+  }
+
+  function beginDreamLoadRequest() {
+    dreamLoadRequestRef.current += 1;
+    return dreamLoadRequestRef.current;
+  }
+
+  function isLatestDreamLoadRequest(requestId) {
+    return dreamLoadRequestRef.current === requestId;
   }
 
   function humanizeStage(stage) {
@@ -130,6 +126,7 @@ export default function LocalizedApp() {
   }
 
   async function bootstrapUser(currentUser) {
+    const requestId = beginDreamLoadRequest();
     setLoading(true);
     setError('');
 
@@ -138,12 +135,20 @@ export default function LocalizedApp() {
       const storedOrder = sanitizeDreamOrder(fetchedDreams, readDreamOrder(currentUser.id));
       const displayDreams = applyDreamOrder(fetchedDreams, storedOrder);
 
+      if (!isLatestDreamLoadRequest(requestId)) {
+        return;
+      }
+
       setCustomDreamOrder(storedOrder);
       setDreams(fetchedDreams);
 
       if (displayDreams.length === 0) {
         clearDreamOrder(currentUser.id);
+        setActiveDream(null);
         const created = await createDream(currentUser.id, language);
+        if (!isLatestDreamLoadRequest(requestId)) {
+          return;
+        }
         setActiveDream(created);
         setDreams([toSummary(created)]);
         setCustomDreamOrder([]);
@@ -151,12 +156,19 @@ export default function LocalizedApp() {
       }
 
       const detail = await fetchDream(currentUser.id, displayDreams[0].id);
+      if (!isLatestDreamLoadRequest(requestId)) {
+        return;
+      }
       setActiveDream(detail);
     } catch (apiError) {
-      setError(apiError.message);
+      if (isLatestDreamLoadRequest(requestId)) {
+        setError(apiError.message);
+      }
     } finally {
       syncApiMode();
-      setLoading(false);
+      if (isLatestDreamLoadRequest(requestId)) {
+        setLoading(false);
+      }
     }
   }
 
@@ -190,7 +202,6 @@ export default function LocalizedApp() {
     setDreams([]);
     setActiveDream(null);
     setDraftMessage('');
-    setDreamToDelete(null);
     setError('');
     setProfileImage('');
     setCustomDreamOrder([]);
@@ -206,17 +217,33 @@ export default function LocalizedApp() {
       return;
     }
 
+    const requestId = beginDreamLoadRequest();
+    const previousActiveDream = activeDream;
+    const dreamSummary = orderedDreams.find((dream) => dream.id === dreamId);
+
     setLoading(true);
     setError('');
+    setDraftMessage('');
+    if (dreamSummary) {
+      setActiveDream(createLoadingDream(dreamSummary));
+    }
 
     try {
       const detail = await fetchDream(user.id, dreamId);
+      if (!isLatestDreamLoadRequest(requestId)) {
+        return;
+      }
       setActiveDream(detail);
     } catch (apiError) {
-      setError(apiError.message);
+      if (isLatestDreamLoadRequest(requestId)) {
+        setError(apiError.message);
+        setActiveDream(previousActiveDream);
+      }
     } finally {
       syncApiMode();
-      setLoading(false);
+      if (isLatestDreamLoadRequest(requestId)) {
+        setLoading(false);
+      }
     }
   }
 
@@ -225,19 +252,28 @@ export default function LocalizedApp() {
       return;
     }
 
+    const requestId = beginDreamLoadRequest();
+    const previousActiveDream = activeDream;
     setCreatingDream(true);
     setError('');
+    setDraftMessage('');
+    setActiveDream(null);
 
     try {
       const created = await createDream(user.id, language);
+      if (!isLatestDreamLoadRequest(requestId)) {
+        return;
+      }
       setActiveDream(created);
       setDreams((current) => sortDreams([toSummary(created), ...current]));
       setCustomDreamOrder((current) => (
         current.length > 0 ? [created.id, ...current.filter((dreamId) => dreamId !== created.id)] : current
       ));
-      setDraftMessage('');
     } catch (apiError) {
-      setError(apiError.message);
+      if (isLatestDreamLoadRequest(requestId)) {
+        setError(apiError.message);
+        setActiveDream(previousActiveDream);
+      }
     } finally {
       syncApiMode();
       setCreatingDream(false);
@@ -287,28 +323,26 @@ export default function LocalizedApp() {
     }
   }
 
-  function requestDeleteDream(dreamId) {
-    const target = orderedDreams.find((dream) => dream.id === dreamId);
-    if (target) {
-      setDreamToDelete(target);
-    }
-  }
-
-  async function confirmDeleteDream() {
-    if (!user?.id || !dreamToDelete?.id) {
+  async function handleDeleteDream(dreamId) {
+    if (!user?.id || !dreamId || deletingDream) {
       return;
     }
 
-    const dreamId = dreamToDelete.id;
+    const requestId = beginDreamLoadRequest();
     const nextOrder = customDreamOrder.filter((itemId) => itemId !== dreamId);
     setDeletingDream(true);
     setError('');
+    setDraftMessage('');
 
     try {
       await deleteDream(user.id, dreamId);
 
       const nextDreams = dreams.filter((dream) => dream.id !== dreamId);
       const nextDisplayedDreams = applyDreamOrder(nextDreams, nextOrder);
+
+      if (!isLatestDreamLoadRequest(requestId)) {
+        return;
+      }
 
       setCustomDreamOrder(nextOrder);
       setDreams(nextDreams);
@@ -318,20 +352,29 @@ export default function LocalizedApp() {
       }
 
       if (nextDisplayedDreams.length > 0) {
+        setActiveDream(createLoadingDream(nextDisplayedDreams[0]));
         const detail = await fetchDream(user.id, nextDisplayedDreams[0].id);
+        if (!isLatestDreamLoadRequest(requestId)) {
+          return;
+        }
         setActiveDream(detail);
       } else {
+        setActiveDream(null);
         const created = await createDream(user.id, language);
+        if (!isLatestDreamLoadRequest(requestId)) {
+          return;
+        }
         setActiveDream(created);
         setDreams([toSummary(created)]);
         setCustomDreamOrder([]);
       }
     } catch (apiError) {
-      setError(apiError.message);
+      if (isLatestDreamLoadRequest(requestId)) {
+        setError(apiError.message);
+      }
     } finally {
       syncApiMode();
       setDeletingDream(false);
-      setDreamToDelete(null);
     }
   }
 
@@ -391,13 +434,13 @@ export default function LocalizedApp() {
     }
 
     if (!file.type.startsWith('image/')) {
-      setError(language === 'en' ? 'You can upload images only.' : 'Можно загрузить только изображение.');
+      setError(copy.profileImageTypeError);
       event.target.value = '';
       return;
     }
 
     if (file.size > MAX_PROFILE_IMAGE_SIZE) {
-      setError(language === 'en' ? 'The image must be smaller than 5 MB.' : 'Фото должно быть меньше 5 МБ.');
+      setError(copy.profileImageSizeError);
       event.target.value = '';
       return;
     }
@@ -405,7 +448,7 @@ export default function LocalizedApp() {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result !== 'string') {
-        setError(language === 'en' ? 'Could not read the image.' : 'Не удалось прочитать изображение.');
+        setError(copy.profileImageReadError);
         return;
       }
       writeProfileImage(user.id, reader.result);
@@ -413,11 +456,19 @@ export default function LocalizedApp() {
       setError('');
     };
     reader.onerror = () => {
-      setError(language === 'en' ? 'Could not upload the image.' : 'Не удалось загрузить изображение.');
+      setError(copy.profileImageUploadError);
     };
 
     reader.readAsDataURL(file);
     event.target.value = '';
+  }
+
+  function handleKeywordSuggestionClick(keyword) {
+    if (!keywordSelectionActive) {
+      return;
+    }
+
+    setDraftMessage((current) => toggleKeywordSelectionDraft(current, keyword));
   }
 
   const sidebarTitle = user ? user.username : copy.appName;
@@ -628,7 +679,7 @@ export default function LocalizedApp() {
                 >
                   <button className="dream-card-main" type="button" onClick={() => handleSelectDream(dream.id)}>
                     <div className="dream-card-head">
-                      <span className="dream-card-grip" aria-hidden="true">⋮⋮</span>
+                      <span className="dream-card-grip" aria-hidden="true">::</span>
                       <strong>{dream.title}</strong>
                       <div className="dream-card-meta">
                         {isDreamPending(dream.id) ? (
@@ -644,10 +695,10 @@ export default function LocalizedApp() {
                     className="dream-card-delete"
                     type="button"
                     aria-label={`${copy.deleteDreamTitle} ${dream.title}`}
-                    onClick={() => requestDeleteDream(dream.id)}
+                    onClick={() => void handleDeleteDream(dream.id)}
                     disabled={isDreamPending(dream.id) || deletingDream}
                   >
-                    ×
+                    x
                   </button>
                 </article>
               ))}
@@ -702,18 +753,49 @@ export default function LocalizedApp() {
               </div>
 
               <form className="composer" onSubmit={handleSubmitMessage}>
+                {keywordSelectionActive ? (
+                  <div className="keyword-selector">
+                    <div className="keyword-selector-head">
+                      <p className="panel-label panel-label-dark">{copy.keywordSelectionTitle}</p>
+                      <p className="hint-text">{copy.keywordSelectionHint}</p>
+                    </div>
+
+                    {activeDream?.keywords?.length ? (
+                      <div className="keyword-selector-grid">
+                        {activeDream.keywords.map((keyword) => (
+                          <button
+                            key={keyword}
+                            className={`keyword-toggle ${selectedComposerKeywords.includes(keyword.toLowerCase()) ? 'is-active' : ''}`}
+                            type="button"
+                            onClick={() => handleKeywordSuggestionClick(keyword)}
+                            disabled={loading || activeDreamPending}
+                          >
+                            {keyword}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="hint-text">{copy.keywordSelectionEmpty}</p>
+                    )}
+                  </div>
+                ) : null}
+
                 <label className="composer-label" htmlFor="dream-message">{copy.composerLabel}</label>
                 <textarea
                   id="dream-message"
                   value={draftMessage}
                   onChange={(event) => setDraftMessage(event.target.value)}
                   onKeyDown={handleComposerKeyDown}
-                  placeholder={copy.composerPlaceholder}
+                  placeholder={keywordSelectionActive ? copy.keywordComposerPlaceholder : copy.composerPlaceholder}
                   rows={5}
                   disabled={loading || activeDreamPending || !activeDream}
                 />
                 <div className="composer-actions">
-                  {error ? <p className="error-text">{error}</p> : <p className="hint-text">{copy.composerHint}</p>}
+                  {error ? (
+                    <p className="error-text">{error}</p>
+                  ) : (
+                    <p className="hint-text">{keywordSelectionActive ? copy.keywordSelectionSendHint : copy.composerHint}</p>
+                  )}
                   <button className="primary-button" type="submit" disabled={loading || activeDreamPending || !draftMessage.trim()}>
                     {activeDreamPending ? copy.waitingResponse : copy.send}
                   </button>
@@ -762,6 +844,17 @@ export default function LocalizedApp() {
                 </>
               ) : (
                 <>
+                  {activeDream?.keywords?.length ? (
+                    <div className="keywords-block">
+                      <p className="panel-label">{copy.keyImages}</p>
+                      <div className="keywords">
+                        {activeDream.keywords.map((keyword) => (
+                          <span key={keyword} className="keyword-chip">{keyword}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="waiting-card waiting-card-strong">
                     <p>{copy.waitingInterpretation}</p>
                   </div>
@@ -780,32 +873,6 @@ export default function LocalizedApp() {
           </div>
         </main>
       </div>
-
-      {dreamToDelete ? (
-        <div className="modal-scrim" role="presentation" onClick={() => setDreamToDelete(null)}>
-          <div
-            className="modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-dialog-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <p className="eyebrow">{copy.confirmation}</p>
-            <h2 id="delete-dialog-title">{copy.deleteDreamTitle}</h2>
-            <p className="modal-copy">
-              {copy.deleteDreamCopy} <strong>{dreamToDelete.title}</strong>
-            </p>
-            <div className="modal-actions">
-              <button className="ghost-button" type="button" onClick={() => setDreamToDelete(null)} disabled={deletingDream}>
-                {copy.cancel}
-              </button>
-              <button className="danger-button" type="button" onClick={() => void confirmDeleteDream()} disabled={deletingDream}>
-                {deletingDream ? copy.deleting : copy.confirm}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </>
   );
 }
@@ -885,6 +952,18 @@ function toSummary(dream) {
   };
 }
 
+function createLoadingDream(dream) {
+  return {
+    id: dream.id,
+    title: dream.title,
+    stage: dream.stage,
+    interpretation: dream.interpretation ?? null,
+    keywords: dream.keywords ?? [],
+    messages: [],
+    updatedAt: dream.updatedAt,
+  };
+}
+
 function sortDreams(dreams) {
   return [...dreams].sort((left, right) => new Date(right.updatedAt) - new Date(left.updatedAt));
 }
@@ -914,4 +993,31 @@ function reorderDreamIds(currentIds, sourceId, targetId) {
   }
   nextIds.splice(targetIndex, 0, sourceId);
   return nextIds;
+}
+
+function parseComposerKeywords(value) {
+  return value
+    .split(/[,\n;]/)
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function toggleKeywordSelectionDraft(currentValue, keyword) {
+  const normalizedKeyword = keyword.trim();
+  if (!normalizedKeyword) {
+    return currentValue;
+  }
+
+  const parts = currentValue
+    .split(/[,\n;]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const existingIndex = parts.findIndex((item) => item.toLowerCase() === normalizedKeyword.toLowerCase());
+  if (existingIndex >= 0) {
+    const next = parts.filter((_, index) => index !== existingIndex);
+    return next.join(', ');
+  }
+
+  return [...parts, normalizedKeyword].join(', ');
 }

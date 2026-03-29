@@ -1,6 +1,6 @@
 ﻿const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 const FORCE_MOCK_API = import.meta.env.VITE_USE_MOCK_API === 'true';
-const MOCK_DB_KEY = 'dream-journal-mock-db-v3';
+const MOCK_DB_KEY = 'dream-journal-mock-db-v4';
 const COMMON_WORDS = new Set([
   'и',
   'в',
@@ -266,8 +266,8 @@ function createSeedDream(db, userId, messages, overrides = {}) {
 
 function getWelcomeMessage(language) {
   return normalizeLanguage(language) === 'en'
-    ? 'Describe your dream in as much detail as you can. I will ask a couple of focused questions and then offer an interpretation.'
-    : 'Опишите сон как можно подробнее. Я задам пару уточняющих вопросов, а потом соберу интерпретацию.';
+    ? 'What did you dream about? Describe your dream in as much detail as you can.'
+    : 'Что вам приснилось? Опишите свой сон как можно подробнее.';
 }
 
 function createEmptyDream(db, userId, language = 'ru') {
@@ -343,57 +343,190 @@ function summarizeDream(dream) {
   };
 }
 
-function extractKeywords(text) {
+function getEmotionPrompt(language) {
+  return normalizeLanguage(language) === 'en'
+    ? 'What emotions did you feel during the dream? For example: fear, shame, anxiety, relief, confusion, curiosity.'
+    : 'Какие чувства вы испытывали во время сна? Например: страх, стыд, тревогу, облегчение, растерянность, интерес.';
+}
+
+function getKeywordSelectionPrompt(language) {
+  return normalizeLanguage(language) === 'en'
+    ? 'I highlighted the key words and objects from the dream. Choose the relevant ones with the buttons below and send them as a comma-separated list.'
+    : 'Я выделил ключевые слова и предметы сна. Выберите подходящие кнопками ниже и отправьте их списком через запятую.';
+}
+
+function getKeywordSelectionRetryPrompt(language) {
+  return normalizeLanguage(language) === 'en'
+    ? 'I could not recognize the chosen keywords yet. Click the buttons below or type the selected words separated by commas.'
+    : 'Я пока не смог распознать выбранные ключевые слова. Нажмите на кнопки ниже или впишите выбранные слова через запятую.';
+}
+
+function extractKeywords(text, language = 'ru', limit = 12) {
+  const normalizedLanguage = normalizeLanguage(language);
   const lowered = text.toLowerCase();
-  const hinted = SYMBOL_HINTS.filter((word) => lowered.includes(word)).slice(0, 3);
+  const suggestions = [];
+  const hintGroups = [
+    { ru: 'школа', en: 'school', stems: ['школ', 'урок', 'учител', 'класс', 'литератур', 'математ', 'school', 'teacher', 'lesson', 'class'] },
+    { ru: 'учитель', en: 'teacher', stems: ['учител', 'teacher'] },
+    { ru: 'отец', en: 'father', stems: ['отец', 'отца', 'отцом', 'пап', 'father', 'dad'] },
+    { ru: 'бывшая партнерша', en: 'former partner', stems: ['бывш', 'девушк', 'partner', 'former partner', 'ex'] },
+    { ru: 'стыд', en: 'shame', stems: ['стыд', 'неловк', 'shame', 'ashamed'] },
+    { ru: 'грусть', en: 'sadness', stems: ['груст', 'печал', 'sad', 'grief'] },
+    { ru: 'обман', en: 'deception', stems: ['обман', 'заман', 'ловуш', 'ложн', 'trap', 'deception', 'false', 'fake'] },
+    { ru: 'узнавание', en: 'recognition', stems: ['узна', 'recogn', 'familiar'] },
+    { ru: 'дом', en: 'home', stems: ['дом', 'квартир', 'комнат', 'home', 'house', 'apartment'] },
+    { ru: 'страх', en: 'fear', stems: ['страх', 'опас', 'угроз', 'тревог', 'fear', 'threat', 'danger', 'unsafe'] },
+    { ru: 'подруга', en: 'friend', stems: ['подруг', 'friend'] },
+    { ru: 'полиция', en: 'police', stems: ['полици', 'police'] },
+    { ru: 'границы', en: 'boundaries', stems: ['границ', 'boundar'] },
+    { ru: 'идентичность', en: 'identity', stems: ['похож', 'сход', 'identity', 'resemblance'] },
+    { ru: 'доверие', en: 'trust', stems: ['довер', 'недовер', 'сомне', 'trust', 'mistrust', 'doubt'] },
+    { ru: 'защита', en: 'protection', stems: ['защит', 'помощ', 'звон', 'control', 'protect', 'help', 'call'] },
+  ];
 
-  if (hinted.length >= 2) {
-    return hinted.map(capitalize);
-  }
-
-  const fallbackWords = lowered
-    .replace(/[^a-zа-я0-9\s-]/gi, ' ')
-    .split(/\s+/)
-    .filter((word) => word.length >= 4 && !COMMON_WORDS.has(word));
-
-  const combined = [...hinted, ...fallbackWords];
-  const unique = [];
-
-  combined.forEach((word) => {
-    const normalized = word.toLowerCase();
-
-    if (!unique.some((item) => item.toLowerCase() === normalized)) {
-      unique.push(word);
+  hintGroups.forEach((group) => {
+    if (group.stems.some((stem) => lowered.includes(stem))) {
+      suggestions.push(normalizedLanguage === 'en' ? group.en : group.ru);
     }
   });
 
-  return (unique.slice(0, 3).map(capitalize).length ? unique.slice(0, 3).map(capitalize) : ['Дорога', 'Дом', 'Ночь']);
+  SYMBOL_HINTS.forEach((word) => {
+    if (lowered.includes(word)) {
+      suggestions.push(capitalize(word));
+    }
+  });
+
+  lowered
+    .replace(/[^a-zа-я0-9\s-]/gi, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length >= 4 && !COMMON_WORDS.has(word))
+    .forEach((word) => {
+      suggestions.push(normalizedLanguage === 'en' ? word : word);
+    });
+
+  const unique = [];
+  suggestions.forEach((item) => {
+    const normalized = item.trim().toLowerCase();
+    if (normalized && !unique.some((value) => value.toLowerCase() === normalized)) {
+      unique.push(item.trim());
+    }
+  });
+
+  const fallback = normalizedLanguage === 'en'
+    ? ['dream', 'emotion', 'memory', 'fear', 'home', 'relationship']
+    : ['сон', 'эмоции', 'память', 'страх', 'дом', 'отношения'];
+
+  return [...unique, ...fallback]
+    .filter((item, index, list) => list.findIndex((value) => value.toLowerCase() === item.toLowerCase()) === index)
+    .slice(0, limit);
+}
+
+function parseSelectedKeywords(text, availableKeywords) {
+  const lowered = text.toLowerCase();
+  const selected = [];
+
+  text.split(/[,\n;]/).forEach((fragment) => {
+    const candidate = fragment.trim().toLowerCase();
+    if (!candidate) {
+      return;
+    }
+
+    const matched = availableKeywords.find((keyword) => keyword.toLowerCase() === candidate);
+    if (matched && !selected.some((value) => value.toLowerCase() === matched.toLowerCase())) {
+      selected.push(matched);
+    }
+  });
+
+  if (selected.length > 0) {
+    return selected;
+  }
+
+  availableKeywords.forEach((keyword) => {
+    if (lowered.includes(keyword.toLowerCase()) && !selected.some((value) => value.toLowerCase() === keyword.toLowerCase())) {
+      selected.push(keyword);
+    }
+  });
+
+  return selected;
 }
 
 function capitalize(word) {
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
-function buildDreamTitle(keywords) {
-  return keywords.slice(0, 2).join(' ');
-}
+function buildDreamTitle(keywords, language = 'ru') {
+  const normalizedLanguage = normalizeLanguage(language);
+  const cleaned = keywords.filter(Boolean);
 
-function buildInterpretation(text, keywords, language = 'ru') {
-  const symbols = keywords.map((keyword) => keyword.toLowerCase()).join(', ');
-
-  if (normalizeLanguage(language) === 'en') {
-    return `The dream seems to gather around ${symbols}. Rather than treating them as isolated symbols, it may be more useful to read the dream as a story about tension, uncertainty, and the need to regain safety and control. The key meaning is often not the danger itself, but the emotional shift that reveals where you no longer fully trust the situation around you.`;
+  if (cleaned.length >= 2) {
+    return `${capitalize(cleaned[0])} ${cleaned[1].toLowerCase()}`;
   }
 
-  return `В этом сне особенно выделяются ${symbols}. Такие символы часто связаны с внутренним переходом, скрытой тревогой и поиском опоры. Сон похож на сюжет о том, что вы уже чувствуете движение к переменам, но еще проверяете, насколько безопасно сделать следующий шаг. Если опираться на эмоции из рассказа, ключевой смысл здесь не в опасности, а в перестройке и поиске более устойчивого состояния.`;
+  return normalizedLanguage === 'en' ? 'New dream' : 'Новый сон';
+}
+
+function buildInterpretation(dreamText, emotions, keywords, language = 'ru') {
+  const normalizedLanguage = normalizeLanguage(language);
+  const narrative = `${dreamText} ${emotions}`.toLowerCase();
+  const keywordList = keywords.join(', ');
+  const hasSchool = includesAny(narrative, ['школ', 'урок', 'учител', 'school', 'teacher', 'lesson']);
+  const hasFather = includesAny(narrative, ['отец', 'отца', 'отцом', 'пап', 'father', 'dad']);
+  const hasDeception = includesAny(narrative, ['обман', 'заман', 'ловуш', 'ложн', 'deception', 'false', 'trap', 'fake']);
+  const hasFear = includesAny(narrative, ['страх', 'тревог', 'опас', 'угроз', 'fear', 'danger', 'threat']);
+  const hasProtection = includesAny(narrative, ['полици', 'подруг', 'помощ', 'звон', 'police', 'friend', 'help', 'call']);
+  const hasShame = includesAny(narrative, ['стыд', 'неловк', 'груст', 'печал', 'shame', 'embarrass', 'sad', 'grief']);
+
+  if (normalizedLanguage === 'en') {
+    const parts = [];
+
+    if (hasSchool && hasFather) {
+      parts.push('The dream places you back into an evaluative school role while linking that vulnerable position to your father and the family story around him.');
+    }
+    if (hasDeception) {
+      parts.push('The shift from recognition to deception suggests that something once familiar no longer feels trustworthy or safe.');
+    }
+    if (hasShame) {
+      parts.push('Shame and sadness matter here as much as fear, because they point to an older relational wound rather than a random threat scene.');
+    }
+    if (hasFear && hasProtection) {
+      parts.push('The ending is important because you do not stay helpless: you call for support and try to restore safety and control.');
+    }
+    if (parts.length === 0) {
+      parts.push(`The dream gathers around ${keywordList}. It reads less like a set of random symbols and more like an emotional story about trust, boundaries, and the need to regain safety.`);
+    }
+
+    parts.push(`A careful waking-life hypothesis is that this dream touches a place where ${keywordList} still connect to vulnerability, but also to your capacity to protect yourself.`);
+    return parts.join(' ');
+  }
+
+  const parts = [];
+
+  if (hasSchool && hasFather) {
+    parts.push('Сон возвращает вас в школьную, оценивающую роль и одновременно связывает эту уязвимую позицию с фигурой отца и семейной историей вокруг него.');
+  }
+  if (hasDeception) {
+    parts.push('Переход от узнавания к ощущению обмана показывает, что что-то знакомое перестает казаться надежным и безопасным.');
+  }
+  if (hasShame) {
+    parts.push('Стыд и грусть здесь не менее важны, чем страх: они указывают не на случайную угрозу, а на старую эмоциональную рану в отношениях.');
+  }
+  if (hasFear && hasProtection) {
+    parts.push('Финал особенно важен тем, что вы не остаетесь беспомощной: зовете поддержку и пытаетесь вернуть себе безопасность и контроль.');
+  }
+  if (parts.length === 0) {
+    parts.push(`В центре сна оказываются ${keywordList}. Здесь полезнее видеть не набор случайных символов, а эмоциональную историю о доверии, границах и попытке вернуть себе чувство безопасности.`);
+  }
+
+  parts.push(`Как бережная гипотеза для бодрствующей жизни, сон может касаться той точки, где мотивы ${keywordList} до сих пор задевают уязвимость, но вместе с этим показывают и вашу способность себя защищать.`);
+  return parts.join(' ');
 }
 
 function buildAssistantInterpretationMessage(keywords, interpretation, language = 'ru') {
   if (normalizeLanguage(language) === 'en') {
-    return `I would highlight these key motifs: ${keywords.join(', ')}.\n\n${interpretation}`;
+    return `I would keep these motifs in focus: ${keywords.join(', ')}.\n\n${interpretation}`;
   }
 
-  return `Я бы выделил ключевые образы: ${keywords.join(', ')}.\n\n${interpretation}`;
+  return `Я бы держал в фокусе такие мотивы: ${keywords.join(', ')}.\n\n${interpretation}`;
 }
 
 function appendAssistantMessage(db, dream, content) {
@@ -425,6 +558,14 @@ function includesAny(text, fragments) {
 function inferDreamTitle(text, keywords, language = 'ru') {
   const lowered = text.toLowerCase();
   const isEnglish = normalizeLanguage(language) === 'en';
+
+  if (
+    includesAny(lowered, ['школ', 'урок', 'учител', 'school', 'teacher', 'lesson'])
+    && includesAny(lowered, ['отец', 'отца', 'отцом', 'пап', 'father', 'dad'])
+    && includesAny(lowered, ['обман', 'ложн', 'заман', 'deception', 'false', 'trap'])
+  ) {
+    return isEnglish ? 'False recognition' : 'Ложное узнавание';
+  }
 
   if (includesAny(lowered, ['убег', 'погон', 'преслед', 'бегу', 'спаса'])) {
     return isEnglish ? 'Escape' : 'Убегание';
@@ -475,41 +616,53 @@ function inferDreamTitle(text, keywords, language = 'ru') {
 
 function advanceMockConversation(db, dream, language = 'ru') {
   const normalizedLanguage = normalizeLanguage(language);
-  const userMessages = dream.messages.filter((message) => message.role === 'USER');
-  const allUserText = userMessages.map((message) => message.content).join(' ');
+  const userMessages = dream.messages.filter((message) => message.role === 'USER').map((message) => message.content.trim());
+  const dreamDescription = userMessages[0] ?? '';
+  const emotionDescription = userMessages[1] ?? '';
+  const keywordSelection = userMessages[2] ?? '';
 
-  if (userMessages.length === 1) {
-    dream.stage = 'CLARIFYING';
-    appendAssistantMessage(
-      db,
-      dream,
-      normalizedLanguage === 'en'
-        ? 'What felt strongest in the dream: fear, relief, curiosity, or confusion? And was someone important nearby?'
-        : 'Что в этом сне чувствовалось сильнее всего: тревога, облегчение, интерес или растерянность? И был ли рядом кто-то важный?',
-    );
-    return;
+  switch (dream.stage) {
+    case 'NEW':
+      dream.keywords = extractKeywords(dreamDescription, normalizedLanguage, 12);
+      dream.interpretation = null;
+      dream.stage = 'COLLECTING_EMOTIONS';
+      appendAssistantMessage(db, dream, getEmotionPrompt(normalizedLanguage));
+      return;
+    case 'COLLECTING_EMOTIONS':
+    case 'CLARIFYING':
+      if (!dream.keywords?.length) {
+        dream.keywords = extractKeywords(dreamDescription, normalizedLanguage, 12);
+      }
+      dream.stage = 'SELECTING_KEYWORDS';
+      appendAssistantMessage(db, dream, getKeywordSelectionPrompt(normalizedLanguage));
+      return;
+    case 'SELECTING_KEYWORDS': {
+      const selectedKeywords = parseSelectedKeywords(keywordSelection, dream.keywords ?? []);
+      if (!selectedKeywords.length) {
+        appendAssistantMessage(db, dream, getKeywordSelectionRetryPrompt(normalizedLanguage));
+        return;
+      }
+
+      const interpretation = buildInterpretation(dreamDescription, emotionDescription, selectedKeywords, normalizedLanguage);
+      dream.keywords = selectedKeywords;
+      dream.title = inferDreamTitle(`${dreamDescription} ${emotionDescription}`, selectedKeywords, normalizedLanguage);
+      dream.stage = 'INTERPRETED';
+      dream.interpretation = interpretation;
+      appendAssistantMessage(db, dream, buildAssistantInterpretationMessage(selectedKeywords, interpretation, normalizedLanguage));
+      return;
+    }
+    case 'INTERPRETED': {
+      const allUserText = userMessages.join(' ');
+      const selectedKeywords = dream.keywords?.length ? dream.keywords : extractKeywords(allUserText, normalizedLanguage, 6);
+      const interpretation = buildInterpretation(dreamDescription, `${emotionDescription} ${userMessages.slice(3).join(' ')}`.trim(), selectedKeywords, normalizedLanguage);
+      dream.interpretation = interpretation;
+      dream.title = inferDreamTitle(allUserText, selectedKeywords, normalizedLanguage);
+      appendAssistantMessage(db, dream, buildAssistantInterpretationMessage(selectedKeywords, interpretation, normalizedLanguage));
+      return;
+    }
+    default:
+      return;
   }
-
-  if (userMessages.length === 2) {
-    dream.stage = 'CLARIFYING';
-    appendAssistantMessage(
-      db,
-      dream,
-      normalizedLanguage === 'en'
-        ? 'One more detail for accuracy: how did it end, and which image stayed with you most strongly at the end?'
-        : 'Еще один момент для точности: чем все закончилось и какой образ запомнился самым ярким в финале?',
-    );
-    return;
-  }
-
-  const keywords = extractKeywords(allUserText);
-  const interpretation = buildInterpretation(allUserText, keywords, normalizedLanguage);
-
-  dream.keywords = keywords;
-  dream.title = inferDreamTitle(allUserText, keywords, normalizedLanguage);
-  dream.stage = 'INTERPRETED';
-  dream.interpretation = interpretation;
-  appendAssistantMessage(db, dream, buildAssistantInterpretationMessage(keywords, interpretation, normalizedLanguage));
 }
 
 async function mockLogin(username, password) {

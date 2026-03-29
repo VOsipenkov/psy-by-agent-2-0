@@ -12,7 +12,7 @@ export const UI_COPY = {
       },
       {
         index: '02',
-        title: 'Символы и чувства',
+        title: 'Чувства и мотивы',
         description: 'Сервис выделяет ключевые образы, эмоции и поворотные моменты сна.',
       },
       {
@@ -41,6 +41,10 @@ export const UI_COPY = {
     authLoggingIn: 'Входим...',
     authCreatingAccount: 'Создаем аккаунт...',
     uploadProfilePhoto: 'Загрузить фото профиля',
+    profileImageTypeError: 'Можно загрузить только изображение.',
+    profileImageSizeError: 'Фото должно быть меньше 5 МБ.',
+    profileImageReadError: 'Не удалось прочитать изображение.',
+    profileImageUploadError: 'Не удалось загрузить изображение.',
     logout: 'Выйти',
     previousDreams: 'Предыдущие сны',
     mockBanner: 'Локальный демо-режим: интерфейс работает без backend и Docker.',
@@ -54,10 +58,11 @@ export const UI_COPY = {
     you: 'Вы',
     assistant: 'Ассистент',
     emptyTimeline:
-      'Начните с любого описания сна. Ассистент сам подхватит беседу и задаст уточняющие вопросы.',
+      'Начните с описания сна. Ассистент попросит чувства, предложит ключевые слова и затем соберет интерпретацию.',
     composerLabel: 'Сообщение',
     composerPlaceholder:
-      'Опишите сон: кто был рядом, какие символы запомнились, что чувствовали...',
+      'Опишите сон: кто был рядом, что происходило, какие детали запомнились...',
+    keywordComposerPlaceholder: 'Выберите слова кнопками ниже или впишите их через запятую...',
     composerHint: 'Enter отправляет сообщение, Shift+Enter переносит строку.',
     waitingResponse: 'Ожидаем ответ...',
     send: 'Отправить',
@@ -69,12 +74,18 @@ export const UI_COPY = {
     statusLabel: 'Статус',
     updatedLabel: 'Последнее обновление',
     waitingInterpretation:
-      'Здесь появятся 2-3 ключевых слова и итоговая интерпретация, когда ассистент соберет достаточно деталей.',
+      'Здесь появятся ключевые слова и итоговая интерпретация, когда ассистент соберет достаточно данных.',
     processSteps: [
-      'Вы свободно рассказываете сон без жесткой формы.',
-      'Ассистент задает пару уточняющих вопросов и выделяет символы.',
-      'После этого появляется название сна и итоговая трактовка.',
+      'Вы описываете сон своими словами.',
+      'Ассистент уточняет, какие чувства вы испытывали во сне.',
+      'Затем вы выбираете ключевые слова и предметы сна.',
+      'После этого появляется итоговая интерпретация.',
     ],
+    keywordSelectionTitle: 'Выберите ключевые слова или предметы сна',
+    keywordSelectionHint:
+      'Нажимайте на кнопки. Выбранные слова автоматически соберутся в поле сообщения через запятую.',
+    keywordSelectionEmpty: 'Ключевые слова пока подготавливаются.',
+    keywordSelectionSendHint: 'Когда список готов, нажмите "Отправить".',
     confirmation: 'Подтверждение',
     deleteDreamTitle: 'Удалить сон?',
     deleteDreamCopy:
@@ -97,7 +108,7 @@ export const UI_COPY = {
       },
       {
         index: '02',
-        title: 'Symbols and feelings',
+        title: 'Feelings and motifs',
         description: 'The app highlights key images, emotions, and turning points in the dream.',
       },
       {
@@ -126,6 +137,10 @@ export const UI_COPY = {
     authLoggingIn: 'Logging in...',
     authCreatingAccount: 'Creating account...',
     uploadProfilePhoto: 'Upload profile photo',
+    profileImageTypeError: 'You can upload images only.',
+    profileImageSizeError: 'The image must be smaller than 5 MB.',
+    profileImageReadError: 'Could not read the image.',
+    profileImageUploadError: 'Could not upload the image.',
     logout: 'Log out',
     previousDreams: 'Previous dreams',
     mockBanner: 'Local demo mode: the interface is running without the backend or Docker.',
@@ -139,10 +154,11 @@ export const UI_COPY = {
     you: 'You',
     assistant: 'Assistant',
     emptyTimeline:
-      'Start with any dream description. The assistant will pick up the conversation and ask follow-up questions.',
+      'Start by describing the dream. The assistant will ask about feelings, offer keywords, and then interpret it.',
     composerLabel: 'Message',
     composerPlaceholder:
-      'Describe the dream: who was there, which images stayed with you, what did you feel...',
+      'Describe the dream: who was there, what happened, which details stayed with you...',
+    keywordComposerPlaceholder: 'Pick words with the buttons below or type them separated by commas...',
     composerHint: 'Enter sends the message, Shift+Enter inserts a line break.',
     waitingResponse: 'Waiting for reply...',
     send: 'Send',
@@ -154,12 +170,18 @@ export const UI_COPY = {
     statusLabel: 'Status',
     updatedLabel: 'Last updated',
     waitingInterpretation:
-      'Key motifs and the final interpretation will appear here once the assistant has enough detail.',
+      'Keywords and the final interpretation will appear here once the assistant has enough detail.',
     processSteps: [
-      'You describe the dream freely, without a rigid form.',
-      'The assistant asks a couple of focused questions and highlights motifs.',
-      'Then the dream gets a title and a final interpretation.',
+      'You describe the dream in your own words.',
+      'The assistant asks what emotions you felt in the dream.',
+      'Then you choose the key words and objects from the dream.',
+      'After that the final interpretation appears.',
     ],
+    keywordSelectionTitle: 'Choose the key words or objects from the dream',
+    keywordSelectionHint:
+      'Click the buttons. The selected words will be collected in the message field, separated by commas.',
+    keywordSelectionEmpty: 'Keyword suggestions are still being prepared.',
+    keywordSelectionSendHint: 'When the list looks right, press "Send".',
     confirmation: 'Confirmation',
     deleteDreamTitle: 'Delete this dream?',
     deleteDreamCopy:
@@ -179,7 +201,10 @@ export function humanizeStageForLanguage(stage, language) {
   if (language === 'en') {
     switch (stage) {
       case 'CLARIFYING':
-        return 'Clarifying';
+      case 'COLLECTING_EMOTIONS':
+        return 'Emotions';
+      case 'SELECTING_KEYWORDS':
+        return 'Keywords';
       case 'INTERPRETED':
         return 'Interpretation ready';
       default:
@@ -189,7 +214,10 @@ export function humanizeStageForLanguage(stage, language) {
 
   switch (stage) {
     case 'CLARIFYING':
-      return 'Уточнение';
+    case 'COLLECTING_EMOTIONS':
+      return 'Эмоции';
+    case 'SELECTING_KEYWORDS':
+      return 'Ключевые слова';
     case 'INTERPRETED':
       return 'Интерпретация готова';
     default:
