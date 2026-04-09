@@ -124,7 +124,7 @@ public class DreamConversationService {
             conversation.setInterpretation(aiResult.interpretation());
             conversation.setTitle(aiResult.title());
             conversation.getKeywords().clear();
-            conversation.getKeywords().addAll(aiResult.keywords().isEmpty() ? selectedKeywords : aiResult.keywords());
+            conversation.getKeywords().addAll(selectedKeywords);
         } else {
             conversation.setStage(DreamStage.SELECTING_KEYWORDS);
         }
@@ -136,13 +136,16 @@ public class DreamConversationService {
     private DreamConversation handleInterpretationRefresh(DreamConversation conversation, String language) {
         List<DreamConversation> recentDreams = findRecentDreamsForAnalysis(conversation);
         DreamAiResult aiResult = dreamAiService.generateReply(conversation, recentDreams, language);
+        List<String> persistedKeywords = conversation.getKeywords().isEmpty()
+            ? aiResult.keywords()
+            : List.copyOf(conversation.getKeywords());
 
         if (aiResult.stage() == DreamStage.INTERPRETED) {
             conversation.setStage(DreamStage.INTERPRETED);
             conversation.setInterpretation(aiResult.interpretation());
             conversation.setTitle(aiResult.title());
             conversation.getKeywords().clear();
-            conversation.getKeywords().addAll(aiResult.keywords());
+            conversation.getKeywords().addAll(persistedKeywords);
         } else {
             conversation.setStage(DreamStage.CLARIFYING);
         }
