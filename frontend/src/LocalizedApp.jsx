@@ -33,21 +33,44 @@ export default function LocalizedApp() {
   const [deletingDream, setDeletingDream] = useState(false);
   const [pendingDreamIds, setPendingDreamIds] = useState([]);
   const [error, setError] = useState('');
+  const [speechError, setSpeechError] = useState('');
   const [isMockMode, setIsMockMode] = useState(() => isMockApiEnabled());
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [profileImage, setProfileImage] = useState(() => readProfileImage(readStoredUser()?.id));
   const [customDreamOrder, setCustomDreamOrder] = useState(() => readDreamOrder(readStoredUser()?.id));
+  const [previewDreamOrder, setPreviewDreamOrder] = useState(null);
   const [draggedDreamId, setDraggedDreamId] = useState(null);
   const [dragOverDreamId, setDragOverDreamId] = useState(null);
   const timelineEndRef = useRef(null);
   const profileImageInputRef = useRef(null);
   const activeDreamIdRef = useRef(null);
   const dreamLoadRequestRef = useRef(0);
+  const timelineSnapshotRef = useRef({ dreamId: null, messageCount: 0 });
+  const speechRecognitionRef = useRef(null);
+  const speechBaseDraftRef = useRef('');
+  const speechTranscriptRef = useRef('');
 
   const copy = useMemo(() => getUiCopy(language), [language]);
   const orderedDreams = useMemo(() => applyDreamOrder(dreams, customDreamOrder), [dreams, customDreamOrder]);
+  const displayedDreams = useMemo(
+    () => applyDreamOrder(dreams, previewDreamOrder ?? customDreamOrder),
+    [dreams, customDreamOrder, previewDreamOrder],
+  );
   const activeDreamPending = activeDream?.id ? pendingDreamIds.includes(activeDream.id) : false;
   const keywordSelectionActive = activeDream?.stage === 'SELECTING_KEYWORDS';
   const selectedComposerKeywords = useMemo(() => parseComposerKeywords(draftMessage), [draftMessage]);
+  const voiceRecognitionAvailable = isSpeechRecognitionSupported();
+  const composerLocked = loading || activeDreamPending || !activeDream;
+  const composerStatusMessage = error
+    || speechError
+    || (isVoiceRecording
+      ? copy.voiceRecordingHint
+      : (keywordSelectionActive ? copy.keywordSelectionSendHint : copy.composerHint));
+  const composerStatusClassName = error || speechError
+    ? 'error-text'
+    : `hint-text${isVoiceRecording ? ' composer-status-live' : ''}`;
+  const voiceButtonLabel = isVoiceRecording ? copy.voiceStop : copy.voiceInput;
+  const voiceButtonTitle = voiceRecognitionAvailable ? voiceButtonLabel : copy.voiceUnsupported;
 
   useEffect(() => {
     writeStoredLanguage(language);
@@ -86,11 +109,38 @@ export default function LocalizedApp() {
   }, [customDreamOrder, user?.id]);
 
   useEffect(() => {
-    timelineEndRef.current?.scrollIntoView({
-      behavior: activeDream?.messages?.length ? 'smooth' : 'auto',
-      block: 'end',
-    });
+    const dreamId = activeDream?.id ?? null;
+    const messageCount = activeDream?.messages?.length ?? 0;
+    const previous = timelineSnapshotRef.current;
+    const shouldScroll = previous.dreamId === dreamId && messageCount > previous.messageCount;
+
+    if (shouldScroll) {
+      timelineEndRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'end',
+      });
+    }
+
+    timelineSnapshotRef.current = { dreamId, messageCount };
   }, [activeDream?.id, activeDream?.messages?.length]);
+
+  useEffect(() => () => {
+    const recognition = speechRecognitionRef.current;
+
+    if (!recognition) {
+      return;
+    }
+
+    recognition.onresult = null;
+    recognition.onerror = null;
+    recognition.onend = null;
+
+    try {
+      recognition.stop();
+    } catch {
+      // Ignore browsers throwing when recognition is already stopping.
+    }
+  }, []);
 
   function syncApiMode() {
     setIsMockMode(isMockApiEnabled());
@@ -123,6 +173,106 @@ export default function LocalizedApp() {
 
   function clearDreamPending(dreamId) {
     setPendingDreamIds((current) => current.filter((itemId) => itemId !== dreamId));
+  }
+
+  function stopVoiceRecognition() {
+    const recognition = speechRecognitionRef.current;
+
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      speechRecognitionRef.current = null;
+
+      try {
+        recognition.stop();
+      } catch {
+        // Ignore browsers throwing when recognition is already stopping.
+      }
+    }
+
+    speechBaseDraftRef.current = '';
+    speechTranscriptRef.current = '';
+    setIsVoiceRecording(false);
+  }
+
+  function handleDraftMessageChange(event) {
+    setDraftMessage(event.target.value);
+
+    if (speechError) {
+      setSpeechError('');
+    }
+  }
+
+  function handleVoiceInputToggle() {
+    if (isVoiceRecording) {
+      stopVoiceRecognition();
+      return;
+    }
+
+    const SpeechRecognition = getSpeechRecognitionConstructor();
+
+    if (!SpeechRecognition) {
+      setSpeechError(copy.voiceUnsupported);
+      return;
+    }
+
+    setError('');
+    setSpeechError('');
+    speechBaseDraftRef.current = draftMessage;
+    speechTranscriptRef.current = '';
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = getSpeechRecognitionLanguage(language);
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event) => {
+      let nextFinalTranscript = speechTranscriptRef.current;
+      let interimTranscript = '';
+
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const transcript = event.results[index][0]?.transcript ?? '';
+
+        if (event.results[index].isFinal) {
+          nextFinalTranscript = mergeVoiceTranscript(nextFinalTranscript, transcript);
+        } else {
+          interimTranscript = mergeVoiceTranscript(interimTranscript, transcript);
+        }
+      }
+
+      speechTranscriptRef.current = nextFinalTranscript;
+      setDraftMessage(buildVoiceDraft(speechBaseDraftRef.current, nextFinalTranscript, interimTranscript));
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === 'aborted') {
+        return;
+      }
+
+      setSpeechError(getSpeechRecognitionErrorMessage(event.error, copy));
+      setIsVoiceRecording(false);
+      speechRecognitionRef.current = null;
+    };
+
+    recognition.onend = () => {
+      speechRecognitionRef.current = null;
+      speechBaseDraftRef.current = '';
+      speechTranscriptRef.current = '';
+      setIsVoiceRecording(false);
+    };
+
+    speechRecognitionRef.current = recognition;
+
+    try {
+      recognition.start();
+      setIsVoiceRecording(true);
+    } catch {
+      speechRecognitionRef.current = null;
+      setSpeechError(copy.voiceCaptureError);
+      setIsVoiceRecording(false);
+    }
   }
 
   async function bootstrapUser(currentUser) {
@@ -197,14 +347,17 @@ export default function LocalizedApp() {
   }
 
   function handleLogout() {
+    stopVoiceRecognition();
     window.localStorage.removeItem(STORAGE_KEY);
     setUser(null);
     setDreams([]);
     setActiveDream(null);
     setDraftMessage('');
     setError('');
+    setSpeechError('');
     setProfileImage('');
     setCustomDreamOrder([]);
+    setPreviewDreamOrder(null);
     setDraggedDreamId(null);
     setDragOverDreamId(null);
     setPendingDreamIds([]);
@@ -217,13 +370,16 @@ export default function LocalizedApp() {
       return;
     }
 
+    stopVoiceRecognition();
     const requestId = beginDreamLoadRequest();
     const previousActiveDream = activeDream;
     const dreamSummary = orderedDreams.find((dream) => dream.id === dreamId);
 
     setLoading(true);
     setError('');
+    setSpeechError('');
     setDraftMessage('');
+    setPreviewDreamOrder(null);
     if (dreamSummary) {
       setActiveDream(createLoadingDream(dreamSummary));
     }
@@ -252,11 +408,14 @@ export default function LocalizedApp() {
       return;
     }
 
+    stopVoiceRecognition();
     const requestId = beginDreamLoadRequest();
     const previousActiveDream = activeDream;
     setCreatingDream(true);
     setError('');
+    setSpeechError('');
     setDraftMessage('');
+    setPreviewDreamOrder(null);
     setActiveDream(null);
 
     try {
@@ -285,11 +444,13 @@ export default function LocalizedApp() {
       return;
     }
 
+    stopVoiceRecognition();
     const dreamId = activeDream.id;
     const outgoingMessage = draftMessage.trim();
 
     markDreamPending(dreamId);
     setError('');
+    setSpeechError('');
     setDraftMessage('');
 
     try {
@@ -328,11 +489,14 @@ export default function LocalizedApp() {
       return;
     }
 
+    stopVoiceRecognition();
     const requestId = beginDreamLoadRequest();
     const nextOrder = customDreamOrder.filter((itemId) => itemId !== dreamId);
     setDeletingDream(true);
     setError('');
+    setSpeechError('');
     setDraftMessage('');
+    setPreviewDreamOrder(null);
 
     try {
       await deleteDream(user.id, dreamId);
@@ -383,6 +547,7 @@ export default function LocalizedApp() {
     event.dataTransfer.setData('text/plain', dreamId);
     setDraggedDreamId(dreamId);
     setDragOverDreamId(dreamId);
+    setPreviewDreamOrder(displayedDreams.map((dream) => dream.id));
   }
 
   function handleDreamDragOver(event) {
@@ -395,31 +560,40 @@ export default function LocalizedApp() {
     if (!draggedDreamId || draggedDreamId === dreamId) {
       return;
     }
+    const currentOrder = previewDreamOrder ?? displayedDreams.map((dream) => dream.id);
+    const nextOrder = reorderDreamIds(currentOrder, draggedDreamId, dreamId);
     setDragOverDreamId(dreamId);
+    if (!areDreamOrdersEqual(currentOrder, nextOrder)) {
+      setPreviewDreamOrder(nextOrder);
+    }
   }
 
   function handleDreamDrop(event, targetDreamId) {
     event.preventDefault();
     const sourceDreamId = draggedDreamId ?? event.dataTransfer.getData('text/plain');
 
-    if (!sourceDreamId || sourceDreamId === targetDreamId) {
+    if (!sourceDreamId) {
       setDraggedDreamId(null);
       setDragOverDreamId(null);
+      setPreviewDreamOrder(null);
       return;
     }
 
-    setCustomDreamOrder(reorderDreamIds(
-      orderedDreams.map((dream) => dream.id),
-      sourceDreamId,
-      targetDreamId,
-    ));
+    const currentOrder = previewDreamOrder ?? displayedDreams.map((dream) => dream.id);
+    const nextOrder = sourceDreamId === targetDreamId
+      ? currentOrder
+      : reorderDreamIds(currentOrder, sourceDreamId, targetDreamId);
+
+    setCustomDreamOrder(nextOrder);
     setDraggedDreamId(null);
     setDragOverDreamId(null);
+    setPreviewDreamOrder(null);
   }
 
   function handleDreamDragEnd() {
     setDraggedDreamId(null);
     setDragOverDreamId(null);
+    setPreviewDreamOrder(null);
   }
 
   function openProfileImageDialog() {
@@ -466,6 +640,10 @@ export default function LocalizedApp() {
   function handleKeywordSuggestionClick(keyword) {
     if (!keywordSelectionActive) {
       return;
+    }
+
+    if (speechError) {
+      setSpeechError('');
     }
 
     setDraftMessage((current) => toggleKeywordSelectionDraft(current, keyword));
@@ -616,22 +794,30 @@ export default function LocalizedApp() {
                 )}
               </button>
 
-              <div className="language-switch" aria-label="Language switch">
-                <button
-                  type="button"
-                  className={`language-chip ${language === 'ru' ? 'is-active' : ''}`}
-                  onClick={() => setLanguage('ru')}
-                >
-                  RU
-                </button>
-                <button
-                  type="button"
-                  className={`language-chip ${language === 'en' ? 'is-active' : ''}`}
-                  onClick={() => setLanguage('en')}
-                >
-                  EN
-                </button>
-              </div>
+                <div className="language-switch" aria-label="Language switch">
+                  <button
+                    type="button"
+                    className={`language-chip ${language === 'ru' ? 'is-active' : ''}`}
+                    onClick={() => {
+                      stopVoiceRecognition();
+                      setSpeechError('');
+                      setLanguage('ru');
+                    }}
+                  >
+                    RU
+                  </button>
+                  <button
+                    type="button"
+                    className={`language-chip ${language === 'en' ? 'is-active' : ''}`}
+                    onClick={() => {
+                      stopVoiceRecognition();
+                      setSpeechError('');
+                      setLanguage('en');
+                    }}
+                  >
+                    EN
+                  </button>
+                </div>
             </div>
 
             <div>
@@ -661,7 +847,7 @@ export default function LocalizedApp() {
 
           <div className="sidebar-dreams-section">
             <div className="dream-list">
-              {orderedDreams.map((dream) => (
+              {displayedDreams.map((dream) => (
                 <article
                   key={dream.id}
                   className={[
@@ -688,7 +874,7 @@ export default function LocalizedApp() {
                         <span>{humanizeStage(dream.stage)}</span>
                       </div>
                     </div>
-                    <p>{dream.keywords?.length ? dream.keywords.join(' • ') : copy.fallbackDreamKeywords}</p>
+                    <p>{formatDreamListKeywords(dream, copy.fallbackDreamKeywords)}</p>
                     <time>{formatDate(dream.updatedAt) || copy.justNow}</time>
                   </button>
                   <button
@@ -743,6 +929,20 @@ export default function LocalizedApp() {
                   </article>
                 ))}
 
+                {activeDreamPending ? (
+                  <article className="message-card message-assistant message-thinking" aria-live="polite">
+                    <div className="message-meta">
+                      <p className="message-role">{copy.assistant}</p>
+                      <time>{copy.justNow}</time>
+                    </div>
+                    <div className="typing-dots" aria-label={copy.assistantThinking}>
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </article>
+                ) : null}
+
                 {!activeDream?.messages?.length && !loading ? (
                   <div className="empty-state">
                     <p>{copy.emptyTimeline}</p>
@@ -784,21 +984,34 @@ export default function LocalizedApp() {
                 <textarea
                   id="dream-message"
                   value={draftMessage}
-                  onChange={(event) => setDraftMessage(event.target.value)}
+                  onChange={handleDraftMessageChange}
                   onKeyDown={handleComposerKeyDown}
                   placeholder={keywordSelectionActive ? copy.keywordComposerPlaceholder : copy.composerPlaceholder}
                   rows={5}
-                  disabled={loading || activeDreamPending || !activeDream}
+                  disabled={composerLocked || isVoiceRecording}
                 />
                 <div className="composer-actions">
-                  {error ? (
-                    <p className="error-text">{error}</p>
-                  ) : (
-                    <p className="hint-text">{keywordSelectionActive ? copy.keywordSelectionSendHint : copy.composerHint}</p>
-                  )}
-                  <button className="primary-button" type="submit" disabled={loading || activeDreamPending || !draftMessage.trim()}>
-                    {activeDreamPending ? copy.waitingResponse : copy.send}
-                  </button>
+                  <p className={composerStatusClassName}>{composerStatusMessage}</p>
+                  <div className="composer-submit-group">
+                    <button
+                      className={`ghost-button composer-mic-button ${isVoiceRecording ? 'is-recording' : ''}`}
+                      type="button"
+                      onClick={handleVoiceInputToggle}
+                      disabled={composerLocked}
+                      aria-label={voiceButtonLabel}
+                      aria-pressed={isVoiceRecording}
+                      title={voiceButtonTitle}
+                    >
+                      <span className="composer-mic-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                          <path d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V7A3.5 3.5 0 1 0 8.5 7v5a3.5 3.5 0 0 0 3.5 3.5Zm6-3.5a1 1 0 1 1 2 0 8 8 0 0 1-7 7.94V22h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-2.06A8 8 0 0 1 4 12a1 1 0 1 1 2 0 6 6 0 0 0 12 0Z" />
+                        </svg>
+                      </span>
+                    </button>
+                    <button className="primary-button" type="submit" disabled={composerLocked || isVoiceRecording || !draftMessage.trim()}>
+                      {activeDreamPending ? copy.waitingResponse : copy.send}
+                    </button>
+                  </div>
                 </div>
               </form>
             </section>
@@ -995,6 +1208,25 @@ function reorderDreamIds(currentIds, sourceId, targetId) {
   return nextIds;
 }
 
+function areDreamOrdersEqual(left, right) {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((dreamId, index) => dreamId === right[index]);
+}
+
+function formatDreamListKeywords(dream, fallbackText) {
+  if (dream?.stage !== 'INTERPRETED' || !dream.keywords?.length) {
+    return fallbackText;
+  }
+
+  return dream.keywords.join(' • ');
+}
+
 function parseComposerKeywords(value) {
   return value
     .split(/[,\n;]/)
@@ -1020,4 +1252,69 @@ function toggleKeywordSelectionDraft(currentValue, keyword) {
   }
 
   return [...parts, normalizedKeyword].join(', ');
+}
+
+function getSpeechRecognitionConstructor() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null;
+}
+
+function isSpeechRecognitionSupported() {
+  return Boolean(getSpeechRecognitionConstructor());
+}
+
+function getSpeechRecognitionLanguage(language) {
+  return language === 'en' ? 'en-US' : 'ru-RU';
+}
+
+function normalizeVoiceSegment(value) {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function mergeVoiceTranscript(currentTranscript, nextFragment) {
+  const left = normalizeVoiceSegment(currentTranscript);
+  const right = normalizeVoiceSegment(nextFragment);
+
+  if (!left) {
+    return right;
+  }
+
+  if (!right) {
+    return left;
+  }
+
+  return `${left} ${right}`;
+}
+
+function buildVoiceDraft(baseDraft, finalTranscript, interimTranscript = '') {
+  const combinedTranscript = mergeVoiceTranscript(finalTranscript, interimTranscript);
+
+  if (!combinedTranscript) {
+    return baseDraft;
+  }
+
+  const trimmedBase = baseDraft.trimEnd();
+
+  if (!trimmedBase) {
+    return combinedTranscript;
+  }
+
+  return `${trimmedBase}${/\s$/.test(baseDraft) ? '' : ' '}${combinedTranscript}`;
+}
+
+function getSpeechRecognitionErrorMessage(errorCode, copy) {
+  switch (errorCode) {
+    case 'not-allowed':
+    case 'service-not-allowed':
+      return copy.voicePermissionError;
+    case 'no-speech':
+      return copy.voiceNoSpeechError;
+    case 'audio-capture':
+      return copy.voiceCaptureError;
+    default:
+      return copy.voiceCaptureError;
+  }
 }
