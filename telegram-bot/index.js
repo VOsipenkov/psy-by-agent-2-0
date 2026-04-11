@@ -1,3 +1,7 @@
+import dns from 'node:dns';
+
+dns.setDefaultResultOrder?.('ipv4first');
+
 const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN ?? '').trim();
 const TELEGRAM_API_BASE = (process.env.TELEGRAM_API_BASE ?? 'https://api.telegram.org').replace(/\/$/, '');
 const TELEGRAM_BACKEND_URL = (process.env.TELEGRAM_BACKEND_URL ?? 'http://backend:8080').replace(/\/$/, '');
@@ -5,6 +9,11 @@ const TELEGRAM_TRANSCRIBE_URL = (process.env.TELEGRAM_TRANSCRIBE_URL ?? 'http://
 const TELEGRAM_INTERNAL_SECRET = (process.env.TELEGRAM_INTERNAL_SECRET ?? '').trim();
 const TELEGRAM_POLLING_TIMEOUT = Number(process.env.TELEGRAM_POLLING_TIMEOUT ?? 25);
 const TELEGRAM_RETRY_DELAY_MS = Number(process.env.TELEGRAM_RETRY_DELAY_MS ?? 4000);
+const TELEGRAM_API_RETRY_ATTEMPTS = Math.max(1, Number(process.env.TELEGRAM_API_RETRY_ATTEMPTS ?? 3) || 3);
+const TELEGRAM_API_TIMEOUT_MS = Math.max((TELEGRAM_POLLING_TIMEOUT + 15) * 1000, Number(process.env.TELEGRAM_API_TIMEOUT_MS ?? 45_000) || 45_000);
+const TELEGRAM_REQUEST_TIMEOUT_MS = Math.max(10_000, Number(process.env.TELEGRAM_REQUEST_TIMEOUT_MS ?? 20_000) || 20_000);
+const TELEGRAM_FILE_TIMEOUT_MS = Math.max(10_000, Number(process.env.TELEGRAM_FILE_TIMEOUT_MS ?? 60_000) || 60_000);
+const TELEGRAM_BACKEND_TIMEOUT_MS = Math.max(10_000, Number(process.env.TELEGRAM_BACKEND_TIMEOUT_MS ?? 60_000) || 60_000);
 const TELEGRAM_TRANSCRIBE_TIMEOUT_MS = Math.max(15_000, Number(process.env.TELEGRAM_TRANSCRIBE_TIMEOUT_MS ?? 240_000) || 240_000);
 const TELEGRAM_TYPING_INTERVAL_MS = Math.max(2000, Number(process.env.TELEGRAM_TYPING_INTERVAL_MS ?? 4000) || 4000);
 const TELEGRAM_PROGRESS_INTERVAL_MS = Math.max(6000, Number(process.env.TELEGRAM_PROGRESS_INTERVAL_MS ?? 12000) || 12000);
@@ -447,7 +456,12 @@ async function transcribeVoiceMessage(message) {
     throw new Error(buildVoiceRecognitionErrorText(message.from?.language_code));
   }
 
-  const fileResponse = await fetch(`${TELEGRAM_API_BASE}/file/bot${TELEGRAM_BOT_TOKEN}/${telegramFile.file_path}`);
+  const fileResponse = await fetchWithTimeout(
+    `${TELEGRAM_API_BASE}/file/bot${TELEGRAM_BOT_TOKEN}/${telegramFile.file_path}`,
+    {},
+    TELEGRAM_FILE_TIMEOUT_MS,
+    'Telegram file download',
+  );
   if (!fileResponse.ok) {
     throw new Error(buildVoiceRecognitionErrorText(message.from?.language_code));
   }
@@ -494,14 +508,14 @@ async function transcribeVoiceMessage(message) {
 }
 
 async function postBackend(path, payload) {
-  const response = await fetch(`${TELEGRAM_BACKEND_URL}${path}`, {
+  const response = await fetchWithTimeout(`${TELEGRAM_BACKEND_URL}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Telegram-Bot-Secret': TELEGRAM_INTERNAL_SECRET,
     },
     body: JSON.stringify(payload),
-  });
+  }, TELEGRAM_BACKEND_TIMEOUT_MS, `Backend ${path}`);
 
   const data = await parseJsonResponse(response);
   if (!response.ok) {
@@ -1215,20 +1229,44 @@ function parseKeywordCallbackData(data) {
 }
 
 async function callTelegram(method, payload) {
-  const response = await fetch(`${TELEGRAM_API_BASE}/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
+  const timeoutMs = method === 'getUpdates' ? TELEGRAM_API_TIMEOUT_MS : TELEGRAM_REQUEST_TIMEOUT_MS;
+  let lastError = null;
 
-  const data = await parseJsonResponse(response);
-  if (!response.ok || !data?.ok) {
-    throw new Error(data?.description || `Telegram API request failed: ${response.status}`);
+  for (let attempt = 1; attempt <= TELEGRAM_API_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(`${TELEGRAM_API_BASE}/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      }, timeoutMs, `Telegram API ${method}`);
+
+      const data = await parseJsonResponse(response);
+      if (response.ok && data?.ok) {
+        return data.result;
+      }
+
+      const statusError = new Error(data?.description || `Telegram API request failed: ${response.status}`);
+      const shouldRetry = response.status >= 500 || response.status === 429;
+
+      if (!shouldRetry || attempt >= TELEGRAM_API_RETRY_ATTEMPTS) {
+        throw statusError;
+      }
+
+      lastError = statusError;
+    } catch (error) {
+      lastError = error;
+
+      if (attempt >= TELEGRAM_API_RETRY_ATTEMPTS || !isRetryableNetworkError(error)) {
+        throw error;
+      }
+    }
+
+    await sleep(Math.min(TELEGRAM_RETRY_DELAY_MS * attempt, 15_000));
   }
 
-  return data.result;
+  throw lastError ?? new Error(`Telegram API ${method} request failed`);
 }
 
 async function parseJsonResponse(response) {
@@ -1259,4 +1297,49 @@ function fitCallbackText(text) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithTimeout(url, options, timeoutMs, label) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+
+    throw new Error(formatFetchError(label, error));
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function isRetryableNetworkError(error) {
+  const message = String(error?.message ?? '').toLowerCase();
+  return message.includes('fetch failed')
+    || message.includes('econnreset')
+    || message.includes('econnrefused')
+    || message.includes('ehostunreach')
+    || message.includes('enetunreach')
+    || message.includes('timed out')
+    || message.includes('socket hang up');
+}
+
+function formatFetchError(label, error) {
+  const cause = error?.cause?.message || error?.cause?.code || error?.cause;
+  const details = [error?.message, cause]
+    .filter(Boolean)
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+
+  if (details.length === 0) {
+    return `${label} failed`;
+  }
+
+  return `${label} failed: ${details.join(': ')}`;
 }
