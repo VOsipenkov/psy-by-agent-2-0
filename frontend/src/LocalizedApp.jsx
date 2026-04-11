@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  createTelegramLinkCode,
   createDream,
   deleteDream,
   fetchDream,
   fetchDreams,
+  fetchTelegramLinkStatus,
   isMockApiEnabled,
   loginUser,
   registerUser,
@@ -36,6 +38,9 @@ export default function LocalizedApp() {
   const [speechError, setSpeechError] = useState('');
   const [isMockMode, setIsMockMode] = useState(() => isMockApiEnabled());
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [telegramStatus, setTelegramStatus] = useState(null);
+  const [telegramLoading, setTelegramLoading] = useState(false);
+  const [telegramError, setTelegramError] = useState('');
   const [profileImage, setProfileImage] = useState(() => readProfileImage(readStoredUser()?.id));
   const [customDreamOrder, setCustomDreamOrder] = useState(() => readDreamOrder(readStoredUser()?.id));
   const [previewDreamOrder, setPreviewDreamOrder] = useState(null);
@@ -51,6 +56,20 @@ export default function LocalizedApp() {
   const speechTranscriptRef = useRef('');
 
   const copy = useMemo(() => getUiCopy(language), [language]);
+  const telegramText = {
+    title: copy.telegramTitle ?? 'Telegram',
+    hint: copy.telegramHint ?? 'You can write to the bot directly. To connect this website account, press "Link Telegram".',
+    linkedHint: copy.telegramLinkedHint ?? 'This account is already linked to the Telegram bot.',
+    linkedAs: copy.telegramLinkedAs ?? 'Linked as {username}.',
+    linked: copy.telegramLinked ?? 'Linked',
+    notLinked: copy.telegramNotLinked ?? 'Not linked',
+    codeLabel: copy.telegramCodeLabel ?? 'Link code',
+    expiresLabel: copy.telegramExpiresLabel ?? 'Valid until:',
+    generateCode: copy.telegramGenerateCode ?? 'Link Telegram',
+    refreshCode: copy.telegramRefreshCode ?? 'Relink Telegram',
+    generating: copy.telegramGenerating ?? 'Generating...',
+    openBot: copy.telegramOpenBot ?? 'Go to Telegram',
+  };
   const orderedDreams = useMemo(() => applyDreamOrder(dreams, customDreamOrder), [dreams, customDreamOrder]);
   const displayedDreams = useMemo(
     () => applyDreamOrder(dreams, previewDreamOrder ?? customDreamOrder),
@@ -61,6 +80,11 @@ export default function LocalizedApp() {
   const selectedComposerKeywords = useMemo(() => parseComposerKeywords(draftMessage), [draftMessage]);
   const voiceRecognitionAvailable = isSpeechRecognitionSupported();
   const composerLocked = loading || activeDreamPending || !activeDream;
+  const telegramLinked = Boolean(telegramStatus?.linked);
+  const telegramBotLink = telegramStatus?.botLink
+    ?? (telegramStatus?.botUsername ? `https://t.me/${telegramStatus.botUsername}` : null);
+  const telegramStartLink = telegramStatus?.startLink ?? null;
+  const telegramLinkCode = telegramStatus?.linkCode ?? '';
   const composerStatusMessage = error
     || speechError
     || (isVoiceRecording
@@ -81,6 +105,16 @@ export default function LocalizedApp() {
       return;
     }
     void bootstrapUser(user);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setTelegramStatus(null);
+      setTelegramError('');
+      return;
+    }
+
+    void bootstrapTelegram(user);
   }, [user?.id]);
 
   useEffect(() => {
@@ -322,6 +356,21 @@ export default function LocalizedApp() {
     }
   }
 
+  async function bootstrapTelegram(currentUser) {
+    setTelegramLoading(true);
+    setTelegramError('');
+
+    try {
+      const status = await fetchTelegramLinkStatus(currentUser.id);
+      setTelegramStatus(status);
+    } catch (apiError) {
+      setTelegramError(apiError.message);
+    } finally {
+      syncApiMode();
+      setTelegramLoading(false);
+    }
+  }
+
   async function handleAuthSubmit(event) {
     event.preventDefault();
     setLoading(true);
@@ -355,6 +404,9 @@ export default function LocalizedApp() {
     setDraftMessage('');
     setError('');
     setSpeechError('');
+    setTelegramStatus(null);
+    setTelegramError('');
+    setTelegramLoading(false);
     setProfileImage('');
     setCustomDreamOrder([]);
     setPreviewDreamOrder(null);
@@ -363,6 +415,76 @@ export default function LocalizedApp() {
     setPendingDreamIds([]);
     setCreatingDream(false);
     setDeletingDream(false);
+  }
+
+  async function handleGenerateTelegramLinkCode() {
+    if (!user?.id) {
+      return;
+    }
+
+    setTelegramLoading(true);
+    setTelegramError('');
+
+    try {
+      const response = await createTelegramLinkCode(user.id);
+      setTelegramStatus((current) => ({
+        ...(current ?? {}),
+        available: response.available,
+        botUsername: response.botUsername,
+        linkCode: response.code,
+        linkCodeExpiresAt: response.expiresAt,
+        startLink: response.startLink,
+      }));
+    } catch (apiError) {
+      setTelegramError(apiError.message);
+    } finally {
+      syncApiMode();
+      setTelegramLoading(false);
+    }
+  }
+
+  async function handleBindTelegram() {
+    if (telegramLinked) {
+      if (telegramBotLink) {
+        window.open(telegramBotLink, '_blank', 'noopener,noreferrer');
+      }
+      return;
+    }
+
+    setTelegramLoading(true);
+    setTelegramError('');
+
+    try {
+      const response = await createTelegramLinkCode(user.id);
+      const nextStatus = {
+        ...(telegramStatus ?? {}),
+        available: response.available,
+        botUsername: response.botUsername,
+        botLink: response.botLink ?? (response.botUsername ? `https://t.me/${response.botUsername}` : null),
+        linkCode: response.code,
+        linkCodeExpiresAt: response.expiresAt,
+        startLink: response.startLink,
+      };
+
+      setTelegramStatus(nextStatus);
+
+      if (nextStatus.startLink) {
+        window.open(nextStatus.startLink, '_blank', 'noopener,noreferrer');
+      }
+    } catch (apiError) {
+      setTelegramError(apiError.message);
+    } finally {
+      syncApiMode();
+      setTelegramLoading(false);
+    }
+  }
+
+  function handleOpenTelegramBot() {
+    if (!telegramBotLink) {
+      return;
+    }
+
+    window.open(telegramBotLink, '_blank', 'noopener,noreferrer');
   }
 
   async function handleSelectDream(dreamId) {
@@ -845,6 +967,55 @@ export default function LocalizedApp() {
 
           {isMockMode ? <div className="mock-banner">{copy.mockBanner}</div> : null}
 
+          <section className="telegram-card">
+            <div className="telegram-card-head">
+              <p className="panel-label panel-label-dark">{telegramText.title}</p>
+              <span className={`telegram-status-pill ${telegramLinked ? 'is-linked' : ''}`}>
+                {telegramLinked ? telegramText.linked : telegramText.notLinked}
+              </span>
+            </div>
+
+            <p className="hint-text">
+              {telegramLinked
+                ? (telegramStatus?.telegramUsername
+                  ? telegramText.linkedAs.replace('{username}', telegramStatus.telegramUsername)
+                  : telegramText.linkedHint)
+                : telegramText.hint}
+            </p>
+
+            {telegramError ? <p className="error-text">{telegramError}</p> : null}
+
+            {telegramLinkCode ? (
+              <div className="telegram-code-block">
+                <span className="telegram-code-label">{telegramText.codeLabel}</span>
+                <strong className="telegram-code-value">{telegramLinkCode}</strong>
+                <span className="hint-text">
+                  {telegramText.expiresLabel} {formatDate(telegramStatus?.linkCodeExpiresAt) || copy.justNow}
+                </span>
+              </div>
+            ) : null}
+
+            <div className="telegram-card-actions">
+              <button
+                className="ghost-button telegram-action-button"
+                type="button"
+                onClick={() => void handleBindTelegram()}
+                disabled={telegramLoading}
+              >
+                {telegramLoading ? telegramText.generating : (telegramLinkCode ? telegramText.refreshCode : telegramText.generateCode)}
+              </button>
+
+              <button
+                className="primary-button telegram-action-button"
+                type="button"
+                onClick={handleOpenTelegramBot}
+                disabled={!telegramBotLink}
+              >
+                {telegramText.openBot}
+              </button>
+            </div>
+          </section>
+
           <div className="sidebar-dreams-section">
             <div className="dream-list">
               {displayedDreams.map((dream) => (
@@ -956,7 +1127,7 @@ export default function LocalizedApp() {
                 {keywordSelectionActive ? (
                   <div className="keyword-selector">
                     <div className="keyword-selector-head">
-                      <p className="panel-label panel-label-dark">{copy.keywordSelectionTitle}</p>
+              <p className="panel-label panel-label-dark">{copy.keywordSelectionTitle}</p>
                       <p className="hint-text">{copy.keywordSelectionHint}</p>
                     </div>
 

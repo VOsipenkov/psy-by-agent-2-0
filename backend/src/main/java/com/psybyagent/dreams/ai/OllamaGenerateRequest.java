@@ -4,6 +4,7 @@ public record OllamaGenerateRequest(
     String model,
     String prompt,
     boolean stream,
-    String format
+    String format,
+    boolean think
 ) {
 }

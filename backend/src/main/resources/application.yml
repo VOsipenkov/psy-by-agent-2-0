@@ -30,3 +30,8 @@ app:
     base-url: ${APP_OLLAMA_BASE_URL:http://localhost:11434}
     model: ${APP_OLLAMA_MODEL:llama3.1:8b}
     timeout: ${APP_OLLAMA_TIMEOUT:45s}
+  telegram:
+    enabled: ${APP_TELEGRAM_ENABLED:false}
+    bot-username: ${APP_TELEGRAM_BOT_USERNAME:}
+    internal-secret: ${APP_TELEGRAM_INTERNAL_SECRET:}
+    link-code-ttl: ${APP_TELEGRAM_LINK_CODE_TTL:15m}

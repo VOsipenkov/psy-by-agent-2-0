@@ -93,12 +93,15 @@ public class OllamaDreamAiService implements DreamAiService {
         try {
             String prompt = buildPrompt(snapshot, conversation, relevantRecentDreams, normalizedLanguage);
             String requestBody = objectMapper.writeValueAsString(
-                new OllamaGenerateRequest(ollamaProperties.getModel(), prompt, false, "json")
+                new OllamaGenerateRequest(ollamaProperties.getModel(), prompt, false, "json", false)
             );
+            Duration requestTimeout = ollamaProperties.getTimeout() == null
+                ? Duration.ofMinutes(3)
+                : ollamaProperties.getTimeout();
 
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(buildGenerateUri())
-                .timeout(Duration.ofMinutes(3))
+                .timeout(requestTimeout)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                 .build();
@@ -978,7 +981,8 @@ public class OllamaDreamAiService implements DreamAiService {
         String model,
         String prompt,
         boolean stream,
-        String format
+        String format,
+        boolean think
     ) {
     }
 

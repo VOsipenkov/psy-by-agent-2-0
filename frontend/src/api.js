@@ -1,6 +1,7 @@
 ﻿const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 const FORCE_MOCK_API = import.meta.env.VITE_USE_MOCK_API === 'true';
 const MOCK_DB_KEY = 'dream-journal-mock-db-v4';
+const MOCK_TELEGRAM_KEY = 'dream-journal-mock-telegram-v1';
 const COMMON_WORDS = new Set([
   'и',
   'в',
@@ -165,6 +166,22 @@ function readMockDb() {
 
 function writeMockDb(db) {
   window.localStorage.setItem(MOCK_DB_KEY, JSON.stringify(db));
+}
+
+function readMockTelegramState() {
+  const saved = window.localStorage.getItem(MOCK_TELEGRAM_KEY);
+
+  if (saved) {
+    return JSON.parse(saved);
+  }
+
+  const initialState = {};
+  writeMockTelegramState(initialState);
+  return initialState;
+}
+
+function writeMockTelegramState(state) {
+  window.localStorage.setItem(MOCK_TELEGRAM_KEY, JSON.stringify(state));
 }
 
 function createInitialMockDb() {
@@ -801,6 +818,60 @@ async function mockDeleteDream(userId, dreamId) {
   return null;
 }
 
+function generateMockTelegramCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let result = '';
+
+  for (let index = 0; index < 8; index += 1) {
+    result += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+
+  return result;
+}
+
+async function mockFetchTelegramLinkStatus(userId) {
+  await delay();
+  const telegramState = readMockTelegramState();
+  const record = telegramState[String(userId)] ?? {};
+  const isActive = record.expiresAt && new Date(record.expiresAt).getTime() > Date.now();
+  const linkCode = isActive ? record.code : null;
+
+  if (!isActive && record.code) {
+    delete telegramState[String(userId)];
+    writeMockTelegramState(telegramState);
+  }
+
+  return {
+    available: true,
+    linked: false,
+    botUsername: 'dream_journal_demo_bot',
+    botLink: 'https://t.me/dream_journal_demo_bot',
+    telegramUsername: null,
+    linkCode,
+    linkCodeExpiresAt: isActive ? record.expiresAt : null,
+    startLink: linkCode ? `https://t.me/dream_journal_demo_bot?start=${linkCode}` : null,
+  };
+}
+
+async function mockCreateTelegramLinkCode(userId) {
+  await delay();
+  const telegramState = readMockTelegramState();
+  const code = generateMockTelegramCode();
+  const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
+
+  telegramState[String(userId)] = { code, expiresAt };
+  writeMockTelegramState(telegramState);
+
+  return {
+    available: true,
+    botUsername: 'dream_journal_demo_bot',
+    botLink: 'https://t.me/dream_journal_demo_bot',
+    code,
+    expiresAt,
+    startLink: `https://t.me/dream_journal_demo_bot?start=${code}`,
+  };
+}
+
 export function isMockApiEnabled() {
   return mockModeEnabled;
 }
@@ -865,5 +936,21 @@ export function deleteDream(userId, dreamId) {
       method: 'DELETE',
     }),
     () => mockDeleteDream(userId, dreamId),
+  );
+}
+
+export function fetchTelegramLinkStatus(userId) {
+  return withFallback(
+    () => request(`/api/users/${userId}/telegram`),
+    () => mockFetchTelegramLinkStatus(userId),
+  );
+}
+
+export function createTelegramLinkCode(userId) {
+  return withFallback(
+    () => request(`/api/users/${userId}/telegram/link-code`, {
+      method: 'POST',
+    }),
+    () => mockCreateTelegramLinkCode(userId),
   );
 }

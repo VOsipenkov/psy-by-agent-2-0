@@ -71,3 +71,17 @@ npm run dev
 - улучшение промпта и структуры ответа Ollama;
 - потоковая выдача ответа;
 - тесты backend и frontend.
+
+## Telegram bot
+
+The repo now also contains a `telegram-bot` service and `docs/telegram-bot.md`.
+
+Quick setup:
+
+1. Create a real bot in Telegram through BotFather with `/newbot`.
+2. Put the bot username and token into `.env`.
+3. Set `APP_TELEGRAM_ENABLED=true`.
+4. Run `docker compose up --build backend frontend telegram-bot`.
+5. Open the web app, generate a Telegram link code, and open the bot from the sidebar card.
+
+Important: the code for the bot is already added to this repository, but the real Telegram bot account itself must still be created manually in BotFather, because that step requires your Telegram account.

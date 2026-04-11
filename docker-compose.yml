@@ -37,6 +37,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: dream
       APP_OLLAMA_BASE_URL: ${APP_OLLAMA_BASE_URL:-http://ollama:11434}
       APP_OLLAMA_MODEL: ${APP_OLLAMA_MODEL:-llama3.1:8b}
+      APP_TELEGRAM_ENABLED: ${APP_TELEGRAM_ENABLED:-false}
+      APP_TELEGRAM_BOT_USERNAME: ${APP_TELEGRAM_BOT_USERNAME:-}
+      APP_TELEGRAM_INTERNAL_SECRET: ${APP_TELEGRAM_INTERNAL_SECRET:-change-me-telegram-secret}
+      APP_TELEGRAM_LINK_CODE_TTL: ${APP_TELEGRAM_LINK_CODE_TTL:-15m}
     ports:
       - "8080:8080"
 
@@ -49,9 +53,41 @@ services:
     ports:
       - "3000:80"
 
+  speech-to-text:
+    build:
+      context: ./speech-to-text
+    container_name: dream-speech-to-text
+    environment:
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
+      WHISPER_BEAM_SIZE: ${WHISPER_BEAM_SIZE:-1}
+      WHISPER_VAD_FILTER: ${WHISPER_VAD_FILTER:-true}
+      WHISPER_CACHE_DIR: /models
+    volumes:
+      - whisper_models:/models
+
+  telegram-bot:
+    build:
+      context: ./telegram-bot
+    container_name: dream-telegram-bot
+    depends_on:
+      - backend
+      - speech-to-text
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_API_BASE: ${TELEGRAM_API_BASE:-https://api.telegram.org}
+      TELEGRAM_BACKEND_URL: http://backend:8080
+      TELEGRAM_TRANSCRIBE_URL: http://speech-to-text:9000/transcribe
+      TELEGRAM_INTERNAL_SECRET: ${APP_TELEGRAM_INTERNAL_SECRET:-change-me-telegram-secret}
+      TELEGRAM_POLLING_TIMEOUT: ${TELEGRAM_POLLING_TIMEOUT:-25}
+      TELEGRAM_RETRY_DELAY_MS: ${TELEGRAM_RETRY_DELAY_MS:-4000}
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   ollama_data:
+  whisper_models:
 
 
 
