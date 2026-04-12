@@ -93,6 +93,7 @@ public class DreamConversationService {
 
         conversation.setStage(DreamStage.COLLECTING_EMOTIONS);
         conversation.setInterpretation(null);
+        conversation.setRecommendation(null);
         conversation.getKeywords().clear();
         conversation.getKeywords().addAll(keywordCandidates);
         conversation.addMessage(DreamMessage.assistant(emotionPrompt(language)));
@@ -122,6 +123,7 @@ public class DreamConversationService {
         if (aiResult.stage() == DreamStage.INTERPRETED) {
             conversation.setStage(DreamStage.INTERPRETED);
             conversation.setInterpretation(aiResult.interpretation());
+            conversation.setRecommendation(aiResult.recommendation());
             conversation.setTitle(aiResult.title());
             conversation.getKeywords().clear();
             conversation.getKeywords().addAll(selectedKeywords);
@@ -143,6 +145,7 @@ public class DreamConversationService {
         if (aiResult.stage() == DreamStage.INTERPRETED) {
             conversation.setStage(DreamStage.INTERPRETED);
             conversation.setInterpretation(aiResult.interpretation());
+            conversation.setRecommendation(aiResult.recommendation());
             conversation.setTitle(aiResult.title());
             conversation.getKeywords().clear();
             conversation.getKeywords().addAll(persistedKeywords);
@@ -417,6 +420,7 @@ public class DreamConversationService {
             conversation.getTitle(),
             conversation.getStage().name(),
             conversation.getInterpretation(),
+            conversation.getRecommendation(),
             List.copyOf(conversation.getKeywords()),
             messages,
             conversation.getUpdatedAt()

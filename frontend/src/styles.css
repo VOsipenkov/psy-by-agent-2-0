@@ -849,6 +849,7 @@ body::after {
 .empty-state,
 .waiting-card,
 .insight-story,
+.insight-recommendation,
 .insight-details {
   border-radius: 26px;
 }
@@ -994,6 +995,7 @@ body::after {
 
 .keywords-block,
 .insight-story,
+.insight-recommendation,
 .insight-details,
 .waiting-card-strong {
   padding: 18px;
@@ -1019,6 +1021,13 @@ body::after {
 .insight-story {
   display: grid;
   gap: 12px;
+}
+
+.insight-recommendation {
+  display: grid;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(235, 136, 88, 0.16), rgba(255, 255, 255, 0.08));
+  border-color: rgba(255, 216, 200, 0.18);
 }
 
 .insight-details {

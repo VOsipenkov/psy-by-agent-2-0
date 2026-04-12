@@ -31,6 +31,7 @@ import org.springframework.util.StringUtils;
 public class OllamaDreamAiService implements DreamAiService {
 
     private static final Pattern TOKEN_SPLIT_PATTERN = Pattern.compile("[^\\p{L}\\p{N}]+");
+    private static final Pattern SENTENCE_SPLIT_PATTERN = Pattern.compile("(?<=[.!?])\\s+");
     private static final Set<String> STOP_WORDS = Set.of(
         "и", "в", "во", "на", "не", "но", "что", "как", "мне", "меня", "был", "была", "были",
         "это", "этот", "эта", "эти", "она", "они", "его", "ее", "мы", "вы", "ты", "я", "сон",
@@ -139,7 +140,8 @@ public class OllamaDreamAiService implements DreamAiService {
                 assistantMessage,
                 conversation.getTitle(),
                 sanitizeKeywords(payload.keywords(), snapshot, conversation, language),
-                conversation.getInterpretation()
+                conversation.getInterpretation(),
+                conversation.getRecommendation()
             );
         }
 
@@ -158,8 +160,9 @@ public class OllamaDreamAiService implements DreamAiService {
 
         String recurringInsight = buildRecurringDreamsInsight(keywords, recentDreams, language);
         interpretation = mergeRecurringInsight(interpretation, recurringInsight);
+        String recommendation = fallbackRecommendation(snapshot, keywords, language);
 
-        return new DreamAiResult(DreamStage.INTERPRETED, interpretation, title, keywords, interpretation);
+        return interpretedResult(title, keywords, interpretation, recommendation, language);
     }
 
     private DreamAiResult fallback(
@@ -172,7 +175,8 @@ public class OllamaDreamAiService implements DreamAiService {
         String title = chooseTitle(null, keywords, snapshot, language);
         String interpretation = fallbackInterpretation(snapshot, keywords, language);
         interpretation = mergeRecurringInsight(interpretation, buildRecurringDreamsInsight(keywords, recentDreams, language));
-        return new DreamAiResult(DreamStage.INTERPRETED, interpretation, title, keywords, interpretation);
+        String recommendation = fallbackRecommendation(snapshot, keywords, language);
+        return interpretedResult(title, keywords, interpretation, recommendation, language);
     }
 
     private String buildPrompt(
@@ -244,7 +248,8 @@ public class OllamaDreamAiService implements DreamAiService {
               "assistantMessage": "string",
               "title": "1-2 words",
               "keywords": ["keyword1", "keyword2", "keyword3"],
-              "interpretation": "string"
+              "interpretation": "string",
+              "recommendation": "string"
             }
 
             Правила полей:
@@ -252,6 +257,7 @@ public class OllamaDreamAiService implements DreamAiService {
             - keywords: 2-6 ключевых мотивов из текущего сна и выбранных пользователем слов.
             - assistantMessage: краткая подводка или один точный уточняющий вопрос.
             - interpretation: полный разбор сна.
+            - recommendation: \u0440\u043e\u0432\u043d\u043e 3 \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u044f \u0441 \u0431\u0435\u0440\u0435\u0436\u043d\u043e\u0439 \u043f\u0440\u0430\u043a\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0439 \u0440\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0430\u0446\u0438\u0435\u0439 \u0432 \u0442\u043e\u043d\u0435 \u043e\u043f\u044b\u0442\u043d\u043e\u0433\u043e \u043f\u0441\u0438\u0445\u043e\u043b\u043e\u0433\u0430, \u0431\u0435\u0437 \u0434\u0438\u0430\u0433\u043d\u043e\u0437\u043e\u0432 \u0438 \u043c\u0435\u0434\u0438\u0446\u0438\u043d\u0441\u043a\u0438\u0445 \u0441\u043e\u0432\u0435\u0442\u043e\u0432.
 
             Выделенные мотивы текущего сна:
             %s
@@ -338,7 +344,8 @@ public class OllamaDreamAiService implements DreamAiService {
               "assistantMessage": "string",
               "title": "1-2 words",
               "keywords": ["keyword1", "keyword2", "keyword3"],
-              "interpretation": "string"
+              "interpretation": "string",
+              "recommendation": "string"
             }
 
             Field rules:
@@ -346,6 +353,7 @@ public class OllamaDreamAiService implements DreamAiService {
             - keywords: 2-6 key motifs from the current dream and the user-selected words.
             - assistantMessage: a brief lead-in or one focused follow-up question.
             - interpretation: the full dream reading.
+            - recommendation: exactly 3 sentences with a gentle practical recommendation in the voice of an experienced psychologist, without diagnoses or medical advice.
 
             Detected motifs in the current dream:
             %s
@@ -614,6 +622,115 @@ public class OllamaDreamAiService implements DreamAiService {
             return interpretation;
         }
         return interpretation + " " + recurringInsight;
+    }
+
+    private DreamAiResult interpretedResult(
+        String title,
+        List<String> keywords,
+        String interpretation,
+        String recommendation,
+        String language
+    ) {
+        String normalizedRecommendation = normalizeRecommendation(recommendation);
+        String assistantMessage = buildInterpretationAssistantMessage(interpretation, normalizedRecommendation, language);
+        return new DreamAiResult(DreamStage.INTERPRETED, assistantMessage, title, keywords, interpretation, normalizedRecommendation);
+    }
+
+    private String chooseRecommendation(String recommendation, ConversationSnapshot snapshot, List<String> keywords, String language) {
+        String normalizedRecommendation = normalizeRecommendation(recommendation);
+        if (countSentences(normalizedRecommendation) >= 3 && !isWeakRecommendation(normalizedRecommendation, language)) {
+            return normalizedRecommendation;
+        }
+        return fallbackRecommendation(snapshot, keywords, language);
+    }
+
+    private boolean isWeakRecommendation(String recommendation, String language) {
+        String normalized = firstNonBlank(recommendation).toLowerCase(Locale.ROOT);
+        if (!StringUtils.hasText(normalized)) {
+            return true;
+        }
+
+        boolean hasCyrillic = normalized.codePoints()
+            .anyMatch(codePoint -> Character.UnicodeBlock.of(codePoint) == Character.UnicodeBlock.CYRILLIC);
+        boolean hasLongAsciiWord = normalized.matches(".*[a-z]{4,}.*");
+
+        if (isEnglish(language) && hasCyrillic) {
+            return true;
+        }
+        if (!isEnglish(language) && hasLongAsciiWord) {
+            return true;
+        }
+
+        return normalized.contains("describe your dream")
+            || normalized.contains("try again")
+            || normalized.contains("display")
+            || normalized.contains("once the plot")
+            || normalized.contains("text again")
+            || normalized.contains("format");
+    }
+
+    private String normalizeRecommendation(String recommendation) {
+        List<String> sentences = splitIntoSentences(recommendation);
+        if (sentences.isEmpty()) {
+            return "";
+        }
+        return String.join(" ", sentences.stream().limit(3).toList());
+    }
+
+    private int countSentences(String text) {
+        return splitIntoSentences(text).size();
+    }
+
+    private List<String> splitIntoSentences(String text) {
+        String normalized = sanitizeOutputText(text);
+        if (!StringUtils.hasText(normalized)) {
+            return List.of();
+        }
+        return SENTENCE_SPLIT_PATTERN.splitAsStream(normalized.replace("\n", " "))
+            .map(String::trim)
+            .filter(StringUtils::hasText)
+            .toList();
+    }
+
+    private String buildInterpretationAssistantMessage(String interpretation, String recommendation, String language) {
+        if (!StringUtils.hasText(recommendation)) {
+            return interpretation;
+        }
+        return isEnglish(language)
+            ? interpretation + "\n\nPsychologist's recommendation:\n" + recommendation
+            : interpretation + "\n\n\u0420\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0430\u0446\u0438\u044f \u043f\u0441\u0438\u0445\u043e\u043b\u043e\u0433\u0430:\n" + recommendation;
+    }
+
+    private String fallbackRecommendation(ConversationSnapshot snapshot, List<String> keywords, String language) {
+        String narrative = extractCurrentNarrative(snapshot).toLowerCase(Locale.ROOT);
+        List<DetectedTheme> themes = detectThemes(narrative);
+        String joinedKeywords = keywords.isEmpty() ? (isEnglish(language) ? "the dream" : "\u044d\u0442\u043e\u0442 \u0441\u043e\u043d") : String.join(", ", keywords);
+        if (isEnglish(language)) {
+            String first = hasTheme(themes, "fear_threat") || hasTheme(themes, "home_boundaries")
+                ? "Over the next few days, notice which real-life situations bring back anxiety or a sense of reduced safety most quickly."
+                : hasTheme(themes, "shame_grief")
+                    ? "Over the next few days, gently notice where shame, sadness, or vulnerability show up around the same themes."
+                    : "Over the next few days, return to this dream as a clue to which feelings around " + joinedKeywords + " are especially alive right now.";
+            String second = hasTheme(themes, "deception_false_identity") || hasTheme(themes, "trust_mistrust")
+                ? "If a similar tension appears in relationships, ask yourself where trust feels thinner right now and which boundary needs clearer protection."
+                : hasTheme(themes, "protection_help")
+                    ? "If the same tension returns during the day, lean in advance on the kind of support that helps you regain steadiness and a sense of control."
+                    : "If the same feeling returns during the day, name the need or boundary that is asking for more attention.";
+            String third = "A short note about the dream, the feelings, and any repeating themes can help you bring this material into therapy or simply track it with more care and less self-criticism.";
+            return String.join(" ", first, second, third);
+        }
+        String first = hasTheme(themes, "fear_threat") || hasTheme(themes, "home_boundaries")
+            ? "\u0412 \u0431\u043b\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0434\u043d\u0438 \u043f\u043e\u043b\u0435\u0437\u043d\u043e \u043e\u0442\u043c\u0435\u0447\u0430\u0442\u044c, \u0432 \u043a\u0430\u043a\u0438\u0445 \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u0445 \u0441\u0438\u0442\u0443\u0430\u0446\u0438\u044f\u0445 \u0431\u044b\u0441\u0442\u0440\u0435\u0435 \u0432\u0441\u0435\u0433\u043e \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442\u0441\u044f \u0442\u0440\u0435\u0432\u043e\u0433\u0430 \u0438\u043b\u0438 \u043e\u0449\u0443\u0449\u0435\u043d\u0438\u0435 \u043d\u0435\u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442\u0438."
+            : hasTheme(themes, "shame_grief")
+                ? "\u0412 \u0431\u043b\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0434\u043d\u0438 \u043f\u043e\u043b\u0435\u0437\u043d\u043e \u043c\u044f\u0433\u043a\u043e \u0437\u0430\u043c\u0435\u0447\u0430\u0442\u044c, \u0433\u0434\u0435 \u0440\u044f\u0434\u043e\u043c \u0441 \u044d\u0442\u043e\u0439 \u0442\u0435\u043c\u043e\u0439 \u043f\u043e\u0434\u043d\u0438\u043c\u0430\u044e\u0442\u0441\u044f \u0441\u0442\u044b\u0434, \u0433\u0440\u0443\u0441\u0442\u044c \u0438\u043b\u0438 \u0443\u044f\u0437\u0432\u0438\u043c\u043e\u0441\u0442\u044c."
+                : "\u0412 \u0431\u043b\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0434\u043d\u0438 \u043f\u043e\u043b\u0435\u0437\u043d\u043e \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0442\u044c\u0441\u044f \u043a \u044d\u0442\u043e\u043c\u0443 \u0441\u043d\u0443 \u043a\u0430\u043a \u043a \u043f\u043e\u0434\u0441\u043a\u0430\u0437\u043a\u0435 \u043e \u0442\u043e\u043c, \u043a\u0430\u043a\u0438\u0435 \u0447\u0443\u0432\u0441\u0442\u0432\u0430 \u0432\u043e\u043a\u0440\u0443\u0433 \u0442\u0435\u043c\u044b " + joinedKeywords + " \u0441\u0435\u0439\u0447\u0430\u0441 \u043e\u0441\u043e\u0431\u0435\u043d\u043d\u043e \u0436\u0438\u0432\u044b.";
+        String second = hasTheme(themes, "deception_false_identity") || hasTheme(themes, "trust_mistrust")
+            ? "\u0415\u0441\u043b\u0438 \u043f\u043e\u0445\u043e\u0436\u0435\u0435 \u043d\u0430\u043f\u0440\u044f\u0436\u0435\u043d\u0438\u0435 \u0432\u0441\u043f\u043b\u044b\u0432\u0430\u0435\u0442 \u0432 \u043e\u0442\u043d\u043e\u0448\u0435\u043d\u0438\u044f\u0445, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043d\u0430\u0437\u0432\u0430\u0442\u044c \u0441\u0435\u0431\u0435, \u0433\u0434\u0435 \u0441\u0435\u0439\u0447\u0430\u0441 \u0442\u0440\u0443\u0434\u043d\u0435\u0435 \u0434\u043e\u0432\u0435\u0440\u044f\u0442\u044c \u0438 \u043a\u0430\u043a\u0430\u044f \u0433\u0440\u0430\u043d\u0438\u0446\u0430 \u043d\u0443\u0436\u0434\u0430\u0435\u0442\u0441\u044f \u0432 \u0431\u043e\u043b\u0435\u0435 \u044f\u0441\u043d\u043e\u0439 \u0437\u0430\u0449\u0438\u0442\u0435."
+            : hasTheme(themes, "protection_help")
+                ? "\u0415\u0441\u043b\u0438 \u044d\u0442\u043e \u043d\u0430\u043f\u0440\u044f\u0436\u0435\u043d\u0438\u0435 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442\u0441\u044f \u0434\u043d\u0451\u043c, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0437\u0430\u0440\u0430\u043d\u0435\u0435 \u043e\u043f\u0435\u0440\u0435\u0442\u044c\u0441\u044f \u043d\u0430 \u0442\u043e\u0442 \u0441\u043f\u043e\u0441\u043e\u0431 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0438, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u043f\u043e\u043c\u043e\u0433\u0430\u0435\u0442 \u0432\u0435\u0440\u043d\u0443\u0442\u044c \u0432\u0430\u043c \u0443\u0441\u0442\u043e\u0439\u0447\u0438\u0432\u043e\u0441\u0442\u044c \u0438 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c."
+                : "\u0415\u0441\u043b\u0438 \u043f\u043e\u0445\u043e\u0436\u0435\u0435 \u0447\u0443\u0432\u0441\u0442\u0432\u043e \u0432\u0441\u043f\u043b\u044b\u0432\u0430\u0435\u0442 \u0434\u043d\u0451\u043c, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043d\u0430\u0437\u0432\u0430\u0442\u044c, \u043a\u0430\u043a\u0430\u044f \u043f\u043e\u0442\u0440\u0435\u0431\u043d\u043e\u0441\u0442\u044c \u0438\u043b\u0438 \u0433\u0440\u0430\u043d\u0438\u0446\u0430 \u0441\u0435\u0439\u0447\u0430\u0441 \u043f\u0440\u043e\u0441\u0438\u0442 \u0431\u043e\u043b\u044c\u0448\u0435 \u0432\u043d\u0438\u043c\u0430\u043d\u0438\u044f.";
+        String third = "\u041a\u043e\u0440\u043e\u0442\u043a\u0430\u044f \u0437\u0430\u043f\u0438\u0441\u044c \u0441\u043d\u0430, \u0447\u0443\u0432\u0441\u0442\u0432 \u0438 \u043f\u043e\u0432\u0442\u043e\u0440\u044f\u044e\u0449\u0438\u0445\u0441\u044f \u0442\u0435\u043c \u043c\u043e\u0436\u0435\u0442 \u043f\u043e\u043c\u043e\u0447\u044c \u043e\u0431\u0441\u0443\u0434\u0438\u0442\u044c \u044d\u0442\u043e \u0441 \u043f\u0441\u0438\u0445\u043e\u043b\u043e\u0433\u043e\u043c \u0438\u043b\u0438 \u043f\u0440\u043e\u0441\u0442\u043e \u0431\u0435\u0440\u0435\u0436\u043d\u043e \u043e\u0442\u0441\u043b\u0435\u0436\u0438\u0432\u0430\u0442\u044c \u0441\u0432\u043e\u044e \u0434\u0438\u043d\u0430\u043c\u0438\u043a\u0443 \u0431\u0435\u0437 \u0441\u0430\u043c\u043e\u043a\u0440\u0438\u0442\u0438\u043a\u0438.";
+        return String.join(" ", first, second, third);
     }
 
     private String sanitizeOutputText(String text) {
@@ -992,7 +1109,8 @@ public class OllamaDreamAiService implements DreamAiService {
         String assistantMessage,
         String title,
         List<String> keywords,
-        String interpretation
+        String interpretation,
+        String recommendation
     ) {
         public List<String> keywords() {
             return keywords == null ? List.of() : keywords;

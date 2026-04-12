@@ -7,6 +7,7 @@ public record OllamaAnalysisPayload(
     String assistantMessage,
     String title,
     List<String> keywords,
-    String interpretation
+    String interpretation,
+    String recommendation
 ) {
 }

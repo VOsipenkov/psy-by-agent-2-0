@@ -8,6 +8,7 @@ public record DreamAiResult(
     String assistantMessage,
     String title,
     List<String> keywords,
-    String interpretation
+    String interpretation,
+    String recommendation
 ) {
 }

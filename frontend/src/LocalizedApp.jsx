@@ -1211,6 +1211,13 @@ export default function LocalizedApp() {
                     <p className="interpretation-text">{activeDream.interpretation}</p>
                   </div>
 
+                  {activeDream.recommendation ? (
+                    <div className="insight-recommendation">
+                      <p className="panel-label">{copy.psychologistRecommendation}</p>
+                      <p className="interpretation-text">{activeDream.recommendation}</p>
+                    </div>
+                  ) : null}
+
                   <div className="insight-details">
                     <div className="detail-row">
                       <span>{copy.dreamTitleLabel}</span>
@@ -1342,6 +1349,7 @@ function createLoadingDream(dream) {
     title: dream.title,
     stage: dream.stage,
     interpretation: dream.interpretation ?? null,
+    recommendation: dream.recommendation ?? null,
     keywords: dream.keywords ?? [],
     messages: [],
     updatedAt: dream.updatedAt,

@@ -42,6 +42,9 @@ public class DreamConversation extends AuditableEntity {
     @Column(columnDefinition = "TEXT")
     private String interpretation;
 
+    @Column(columnDefinition = "TEXT")
+    private String recommendation;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "dream_keywords", joinColumns = @JoinColumn(name = "conversation_id"))
     @Column(name = "keyword", nullable = false, length = 64)

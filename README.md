@@ -40,6 +40,41 @@ docker compose up --build
 - ollama: `http://localhost:11434`
 - postgres: `localhost:5432`
 
+## Ћокальный Docker + локальна€ Ollama + облачный Qwen
+
+Ёто поддерживаетс€ без изменений backend-кода, потому что backend уже ходит в Ollama API, а локальна€ Ollama умеет работать с cloud-модел€ми через тот же локальный API.
+
+¬ажно: дл€ этого сценари€ используем официальный тег Ollama `qwen3.5:cloud`.
+‘ормулировку `Qwen 3.5 397-cloud` в рамках этого репозитори€ считаем пользовательским названием этого режима запуска: на странице модели Ollama фигурирует семейство `Qwen3.5-397B-A17B`, но тег запуска в Ollama сейчас именно `qwen3.5:cloud`.
+
+ѕодготовка на хосте один раз:
+
+```bash
+ollama signin
+ollama pull qwen3.5:cloud
+```
+
+‘раза, которую можно говорить дл€ такого запуска:
+
+```text
+запустить приложение на локальном докере использу€ локально установленную олламу и облачную модель квен 3.5 397-cloud
+```
+
+ѕод этой фразой в проекте понимаетс€ такой запуск:
+
+```powershell
+$env:APP_OLLAMA_BASE_URL="http://host.docker.internal:11434"
+$env:APP_OLLAMA_MODEL="qwen3.5:cloud"
+$env:APP_OLLAMA_TIMEOUT="10m"
+docker compose -f docker-compose.yml -f docker-compose.local-ollama.yml up --build -d postgres backend frontend speech-to-text telegram-bot
+```
+
+≈сли нужно остановить такой запуск:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.local-ollama.yml down
+```
+
 ## Ћокальный запуск без Docker дл€ frontend/backend
 
 ### »нфраструктура
