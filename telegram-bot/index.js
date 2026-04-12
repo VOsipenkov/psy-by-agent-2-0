@@ -1,4 +1,6 @@
 import dns from 'node:dns';
+import http from 'node:http';
+import https from 'node:https';
 
 dns.setDefaultResultOrder?.('ipv4first');
 
@@ -13,7 +15,7 @@ const TELEGRAM_API_RETRY_ATTEMPTS = Math.max(1, Number(process.env.TELEGRAM_API_
 const TELEGRAM_API_TIMEOUT_MS = Math.max((TELEGRAM_POLLING_TIMEOUT + 15) * 1000, Number(process.env.TELEGRAM_API_TIMEOUT_MS ?? 45_000) || 45_000);
 const TELEGRAM_REQUEST_TIMEOUT_MS = Math.max(10_000, Number(process.env.TELEGRAM_REQUEST_TIMEOUT_MS ?? 20_000) || 20_000);
 const TELEGRAM_FILE_TIMEOUT_MS = Math.max(10_000, Number(process.env.TELEGRAM_FILE_TIMEOUT_MS ?? 60_000) || 60_000);
-const TELEGRAM_BACKEND_TIMEOUT_MS = Math.max(10_000, Number(process.env.TELEGRAM_BACKEND_TIMEOUT_MS ?? 60_000) || 60_000);
+const TELEGRAM_BACKEND_TIMEOUT_MS = Math.max(60_000, Number(process.env.TELEGRAM_BACKEND_TIMEOUT_MS ?? 420_000) || 420_000);
 const TELEGRAM_TRANSCRIBE_TIMEOUT_MS = Math.max(15_000, Number(process.env.TELEGRAM_TRANSCRIBE_TIMEOUT_MS ?? 240_000) || 240_000);
 const TELEGRAM_TYPING_INTERVAL_MS = Math.max(2000, Number(process.env.TELEGRAM_TYPING_INTERVAL_MS ?? 4000) || 4000);
 const TELEGRAM_PROGRESS_INTERVAL_MS = Math.max(6000, Number(process.env.TELEGRAM_PROGRESS_INTERVAL_MS ?? 12000) || 12000);
@@ -508,18 +510,20 @@ async function transcribeVoiceMessage(message) {
 }
 
 async function postBackend(path, payload) {
-  const response = await fetchWithTimeout(`${TELEGRAM_BACKEND_URL}${path}`, {
-    method: 'POST',
-    headers: {
+  // Use node:http for backend calls so long Ollama interpretations are not cut off by fetch headers timeouts.
+  const { statusCode, data } = await postJsonWithTimeout(
+    `${TELEGRAM_BACKEND_URL}${path}`,
+    payload,
+    {
       'Content-Type': 'application/json',
       'X-Telegram-Bot-Secret': TELEGRAM_INTERNAL_SECRET,
     },
-    body: JSON.stringify(payload),
-  }, TELEGRAM_BACKEND_TIMEOUT_MS, `Backend ${path}`);
+    TELEGRAM_BACKEND_TIMEOUT_MS,
+    `Backend ${path}`,
+  );
 
-  const data = await parseJsonResponse(response);
-  if (!response.ok) {
-    throw new Error(data?.message || `Backend request failed: ${response.status}`);
+  if (statusCode < 200 || statusCode >= 300) {
+    throw new Error(data?.message || `Backend request failed: ${statusCode}`);
   }
 
   return data;
@@ -1317,6 +1321,88 @@ async function fetchWithTimeout(url, options, timeoutMs, label) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function postJsonWithTimeout(url, payload, headers, timeoutMs, label) {
+  const target = new URL(url);
+  const client = target.protocol === 'https:' ? https : http;
+  const requestBody = JSON.stringify(payload ?? {});
+  const timeoutMessage = `${label} timed out after ${Math.round(timeoutMs / 1000)}s`;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeout = null;
+
+    const complete = (handler) => (value) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      handler(value);
+    };
+
+    const resolveOnce = complete(resolve);
+    const rejectOnce = complete(reject);
+
+    const request = client.request({
+      protocol: target.protocol,
+      hostname: target.hostname,
+      port: target.port || undefined,
+      path: `${target.pathname}${target.search}`,
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Length': Buffer.byteLength(requestBody),
+        ...headers,
+      },
+    }, (response) => {
+      response.setEncoding('utf8');
+
+      let rawBody = '';
+      response.on('data', (chunk) => {
+        rawBody += chunk;
+      });
+      response.on('end', () => {
+        let data = null;
+
+        if (rawBody.trim()) {
+          try {
+            data = JSON.parse(rawBody);
+          } catch {
+            data = null;
+          }
+        }
+
+        resolveOnce({
+          statusCode: response.statusCode ?? 0,
+          data,
+        });
+      });
+      response.on('error', (error) => {
+        rejectOnce(new Error(formatFetchError(label, error)));
+      });
+    });
+
+    request.on('error', (error) => {
+      if (String(error?.message ?? '') === timeoutMessage) {
+        rejectOnce(new Error(timeoutMessage));
+        return;
+      }
+
+      rejectOnce(new Error(formatFetchError(label, error)));
+    });
+
+    timeout = setTimeout(() => {
+      request.destroy(new Error(timeoutMessage));
+    }, timeoutMs);
+
+    request.write(requestBody);
+    request.end();
+  });
 }
 
 function isRetryableNetworkError(error) {

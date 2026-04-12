@@ -33,6 +33,7 @@ public class TelegramLinkService {
     private static final int MAX_SELECTED_KEYWORDS = 6;
     private static final int MAX_SELECTED_EMOTIONS = 9;
     private static final List<String> EMOTIONS_RU = List.of(
+        "Страх",
         "Радость",
         "Интерес",
         "Любовь",
@@ -44,6 +45,7 @@ public class TelegramLinkService {
         "Вина"
     );
     private static final List<String> EMOTIONS_EN = List.of(
+        "Fear",
         "Joy",
         "Interest",
         "Love",
