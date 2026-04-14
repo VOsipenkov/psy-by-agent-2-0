@@ -1211,7 +1211,19 @@ export default function LocalizedApp() {
                     <p className="interpretation-text">{activeDream.interpretation}</p>
                   </div>
 
-                  {activeDream.recommendation ? (
+                  {hasRecommendationDetails(activeDream?.recommendationDetails) ? (
+                    <div className="insight-recommendation">
+                      <p className="panel-label">{copy.psychologistRecommendation}</p>
+                      <div className="recommendation-grid">
+                        {getRecommendationSections(activeDream.recommendationDetails, language).map((section) => (
+                          <article key={section.id} className="recommendation-card">
+                            <span className="recommendation-kicker">{section.label}</span>
+                            <p className="interpretation-text">{section.value}</p>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  ) : activeDream.recommendation ? (
                     <div className="insight-recommendation">
                       <p className="panel-label">{copy.psychologistRecommendation}</p>
                       <p className="interpretation-text">{activeDream.recommendation}</p>
@@ -1350,6 +1362,7 @@ function createLoadingDream(dream) {
     stage: dream.stage,
     interpretation: dream.interpretation ?? null,
     recommendation: dream.recommendation ?? null,
+    recommendationDetails: dream.recommendationDetails ?? null,
     keywords: dream.keywords ?? [],
     messages: [],
     updatedAt: dream.updatedAt,
@@ -1496,4 +1509,31 @@ function getSpeechRecognitionErrorMessage(errorCode, copy) {
     default:
       return copy.voiceCaptureError;
   }
+}
+
+function hasRecommendationDetails(recommendationDetails) {
+  return Boolean(
+    recommendationDetails
+    && (recommendationDetails.trigger || recommendationDetails.microAction || recommendationDetails.journalPrompt)
+  );
+}
+
+function getRecommendationSections(recommendationDetails, language) {
+  if (!hasRecommendationDetails(recommendationDetails)) {
+    return [];
+  }
+
+  if (language === 'en') {
+    return [
+      { id: 'trigger', label: 'Trigger', value: recommendationDetails.trigger },
+      { id: 'micro-action', label: 'Micro-action', value: recommendationDetails.microAction },
+      { id: 'journal-prompt', label: 'Journal prompt', value: recommendationDetails.journalPrompt },
+    ].filter((section) => section.value);
+  }
+
+  return [
+    { id: 'trigger', label: 'Где это включается', value: recommendationDetails.trigger },
+    { id: 'micro-action', label: 'Что сделать в моменте', value: recommendationDetails.microAction },
+    { id: 'journal-prompt', label: 'Что вынести в дневник', value: recommendationDetails.journalPrompt },
+  ].filter((section) => section.value);
 }

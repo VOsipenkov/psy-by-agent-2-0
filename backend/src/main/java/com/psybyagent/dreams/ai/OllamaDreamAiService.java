@@ -7,6 +7,8 @@ import com.psybyagent.dreams.dream.ChatRole;
 import com.psybyagent.dreams.dream.DreamConversation;
 import com.psybyagent.dreams.dream.DreamMessage;
 import com.psybyagent.dreams.dream.DreamStage;
+import com.psybyagent.dreams.dream.RecommendationDetails;
+import com.psybyagent.dreams.dream.RecommendationTextFormatter;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -141,7 +143,7 @@ public class OllamaDreamAiService implements DreamAiService {
                 conversation.getTitle(),
                 sanitizeKeywords(payload.keywords(), snapshot, conversation, language),
                 conversation.getInterpretation(),
-                conversation.getRecommendation()
+                conversation.getRecommendationDetails()
             );
         }
 
@@ -160,7 +162,7 @@ public class OllamaDreamAiService implements DreamAiService {
 
         String recurringInsight = buildRecurringDreamsInsight(keywords, recentDreams, language);
         interpretation = mergeRecurringInsight(interpretation, recurringInsight);
-        String recommendation = fallbackRecommendation(snapshot, keywords, language);
+        RecommendationDetails recommendation = chooseRecommendation(payload.recommendation(), snapshot, keywords, language);
 
         return interpretedResult(title, keywords, interpretation, recommendation, language);
     }
@@ -175,7 +177,7 @@ public class OllamaDreamAiService implements DreamAiService {
         String title = chooseTitle(null, keywords, snapshot, language);
         String interpretation = fallbackInterpretation(snapshot, keywords, language);
         interpretation = mergeRecurringInsight(interpretation, buildRecurringDreamsInsight(keywords, recentDreams, language));
-        String recommendation = fallbackRecommendation(snapshot, keywords, language);
+        RecommendationDetails recommendation = fallbackRecommendation(snapshot, keywords, language);
         return interpretedResult(title, keywords, interpretation, recommendation, language);
     }
 
@@ -249,7 +251,11 @@ public class OllamaDreamAiService implements DreamAiService {
               "title": "1-2 words",
               "keywords": ["keyword1", "keyword2", "keyword3"],
               "interpretation": "string",
-              "recommendation": "string"
+              "recommendation": {
+                "trigger": "string",
+                "microAction": "string",
+                "journalPrompt": "string"
+              }
             }
 
             Правила полей:
@@ -257,7 +263,11 @@ public class OllamaDreamAiService implements DreamAiService {
             - keywords: 2-6 ключевых мотивов из текущего сна и выбранных пользователем слов.
             - assistantMessage: краткая подводка или один точный уточняющий вопрос.
             - interpretation: полный разбор сна.
-            - recommendation: \u0440\u043e\u0432\u043d\u043e 3 \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u044f \u0441 \u0431\u0435\u0440\u0435\u0436\u043d\u043e\u0439 \u043f\u0440\u0430\u043a\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0439 \u0440\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0430\u0446\u0438\u0435\u0439 \u0432 \u0442\u043e\u043d\u0435 \u043e\u043f\u044b\u0442\u043d\u043e\u0433\u043e \u043f\u0441\u0438\u0445\u043e\u043b\u043e\u0433\u0430, \u0431\u0435\u0437 \u0434\u0438\u0430\u0433\u043d\u043e\u0437\u043e\u0432 \u0438 \u043c\u0435\u0434\u0438\u0446\u0438\u043d\u0441\u043a\u0438\u0445 \u0441\u043e\u0432\u0435\u0442\u043e\u0432.
+            - recommendation.trigger: одно предложение о конкретном жизненном триггере, где может возвращаться главный конфликт сна.
+            - recommendation.microAction: одно предложение с коротким действием или вопросом к себе на 1-5 минут, когда напряжение возвращается.
+            - recommendation.journalPrompt: одно предложение с темой для дневника или разговора с психологом, связанной с персонажами, переломным моментом сна или выбранными словами.
+            - Во всех полях recommendation опирайся хотя бы на один конкретный мотив текущего сна или выбранное пользователем слово.
+            - Избегай пустых формул вроде "полезно замечать", "бережно отслеживать динамику", "без самокритики", если они не привязаны к конкретной сцене, фигуре или действию.
 
             Выделенные мотивы текущего сна:
             %s
@@ -345,7 +355,11 @@ public class OllamaDreamAiService implements DreamAiService {
               "title": "1-2 words",
               "keywords": ["keyword1", "keyword2", "keyword3"],
               "interpretation": "string",
-              "recommendation": "string"
+              "recommendation": {
+                "trigger": "string",
+                "microAction": "string",
+                "journalPrompt": "string"
+              }
             }
 
             Field rules:
@@ -353,7 +367,11 @@ public class OllamaDreamAiService implements DreamAiService {
             - keywords: 2-6 key motifs from the current dream and the user-selected words.
             - assistantMessage: a brief lead-in or one focused follow-up question.
             - interpretation: the full dream reading.
-            - recommendation: exactly 3 sentences with a gentle practical recommendation in the voice of an experienced psychologist, without diagnoses or medical advice.
+            - recommendation.trigger: one sentence naming a concrete waking-life trigger where the dream's main conflict may return.
+            - recommendation.microAction: one sentence with a short action or self-question that can be done in 1-5 minutes when the tension returns.
+            - recommendation.journalPrompt: one sentence with a journaling or therapy focus linked to dream figures, the turning point of the dream, or the user's chosen keywords.
+            - Every recommendation field must stay grounded in at least one concrete motif from the current dream or one user-selected keyword.
+            - Avoid empty wording such as "notice your feelings", "track your dynamics", or "be gentle with yourself" unless it is tied to a specific scene, person, or action.
 
             Detected motifs in the current dream:
             %s
@@ -628,28 +646,40 @@ public class OllamaDreamAiService implements DreamAiService {
         String title,
         List<String> keywords,
         String interpretation,
-        String recommendation,
+        RecommendationDetails recommendation,
         String language
     ) {
-        String normalizedRecommendation = normalizeRecommendation(recommendation);
+        RecommendationDetails normalizedRecommendation = normalizeRecommendation(recommendation);
         String assistantMessage = buildInterpretationAssistantMessage(interpretation, normalizedRecommendation, language);
         return new DreamAiResult(DreamStage.INTERPRETED, assistantMessage, title, keywords, interpretation, normalizedRecommendation);
     }
 
-    private String chooseRecommendation(String recommendation, ConversationSnapshot snapshot, List<String> keywords, String language) {
-        String normalizedRecommendation = normalizeRecommendation(recommendation);
-        if (countSentences(normalizedRecommendation) >= 3 && !isWeakRecommendation(normalizedRecommendation, language)) {
+    private RecommendationDetails chooseRecommendation(
+        RecommendationDetails recommendation,
+        ConversationSnapshot snapshot,
+        List<String> keywords,
+        String language
+    ) {
+        RecommendationDetails normalizedRecommendation = normalizeRecommendation(recommendation);
+        if (normalizedRecommendation != null
+            && !normalizedRecommendation.isEmpty()
+            && !isWeakRecommendation(normalizedRecommendation, language)
+            && isRecommendationGrounded(normalizedRecommendation, snapshot, keywords)) {
             return normalizedRecommendation;
         }
         return fallbackRecommendation(snapshot, keywords, language);
     }
 
-    private boolean isWeakRecommendation(String recommendation, String language) {
-        String normalized = firstNonBlank(recommendation).toLowerCase(Locale.ROOT);
-        if (!StringUtils.hasText(normalized)) {
+    private boolean isWeakRecommendation(RecommendationDetails recommendation, String language) {
+        if (recommendation == null
+            || recommendation.isEmpty()
+            || !StringUtils.hasText(recommendation.trigger())
+            || !StringUtils.hasText(recommendation.microAction())
+            || !StringUtils.hasText(recommendation.journalPrompt())) {
             return true;
         }
 
+        String normalized = firstNonBlank(RecommendationTextFormatter.toPlainText(recommendation)).toLowerCase(Locale.ROOT);
         boolean hasCyrillic = normalized.codePoints()
             .anyMatch(codePoint -> Character.UnicodeBlock.of(codePoint) == Character.UnicodeBlock.CYRILLIC);
         boolean hasLongAsciiWord = normalized.matches(".*[a-z]{4,}.*");
@@ -666,19 +696,64 @@ public class OllamaDreamAiService implements DreamAiService {
             || normalized.contains("display")
             || normalized.contains("once the plot")
             || normalized.contains("text again")
-            || normalized.contains("format");
+            || normalized.contains("format")
+            || normalized.contains("в ближайшие дни полезно замечать")
+            || normalized.contains("короткая запись сна")
+            || normalized.contains("обсудить это с психологом")
+            || normalized.contains("бережно отслеживать")
+            || normalized.contains("bring this material into therapy")
+            || normalized.contains("track it with more care");
     }
 
-    private String normalizeRecommendation(String recommendation) {
-        List<String> sentences = splitIntoSentences(recommendation);
+    private boolean isRecommendationGrounded(
+        RecommendationDetails recommendation,
+        ConversationSnapshot snapshot,
+        List<String> keywords
+    ) {
+        String normalizedRecommendation = firstNonBlank(RecommendationTextFormatter.toPlainText(recommendation)).toLowerCase(Locale.ROOT);
+        LinkedHashSet<String> anchorKeywords = new LinkedHashSet<>();
+
+        snapshot.selectedKeywords().stream()
+            .map(keyword -> keyword.toLowerCase(Locale.ROOT))
+            .forEach(anchorKeywords::add);
+        keywords.stream()
+            .map(keyword -> keyword.toLowerCase(Locale.ROOT))
+            .forEach(anchorKeywords::add);
+
+        long matchedKeywords = anchorKeywords.stream()
+            .filter(normalizedRecommendation::contains)
+            .count();
+        if (matchedKeywords > 0) {
+            return true;
+        }
+
+        List<DetectedTheme> currentThemes = detectThemes(extractCurrentNarrative(snapshot));
+        if (currentThemes.isEmpty()) {
+            return normalizedRecommendation.length() >= 80;
+        }
+
+        List<DetectedTheme> recommendationThemes = detectThemes(normalizedRecommendation);
+        return sharedThemePriority(currentThemes, recommendationThemes) >= 3;
+    }
+
+    private RecommendationDetails normalizeRecommendation(RecommendationDetails recommendation) {
+        if (recommendation == null) {
+            return null;
+        }
+
+        return new RecommendationDetails(
+            normalizeRecommendationPart(recommendation.trigger()),
+            normalizeRecommendationPart(recommendation.microAction()),
+            normalizeRecommendationPart(recommendation.journalPrompt())
+        );
+    }
+
+    private String normalizeRecommendationPart(String recommendationPart) {
+        List<String> sentences = splitIntoSentences(recommendationPart);
         if (sentences.isEmpty()) {
             return "";
         }
-        return String.join(" ", sentences.stream().limit(3).toList());
-    }
-
-    private int countSentences(String text) {
-        return splitIntoSentences(text).size();
+        return sentences.get(0);
     }
 
     private List<String> splitIntoSentences(String text) {
@@ -692,45 +767,154 @@ public class OllamaDreamAiService implements DreamAiService {
             .toList();
     }
 
-    private String buildInterpretationAssistantMessage(String interpretation, String recommendation, String language) {
-        if (!StringUtils.hasText(recommendation)) {
+    private String buildInterpretationAssistantMessage(String interpretation, RecommendationDetails recommendation, String language) {
+        if (recommendation == null || recommendation.isEmpty()) {
             return interpretation;
         }
         return isEnglish(language)
-            ? interpretation + "\n\nPsychologist's recommendation:\n" + recommendation
-            : interpretation + "\n\n\u0420\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0430\u0446\u0438\u044f \u043f\u0441\u0438\u0445\u043e\u043b\u043e\u0433\u0430:\n" + recommendation;
+            ? interpretation + "\n\nPsychologist's recommendation:\n1. Trigger: " + recommendation.trigger()
+                + "\n2. Micro-action: " + recommendation.microAction()
+                + "\n3. Journal prompt: " + recommendation.journalPrompt()
+            : interpretation + "\n\nРекомендация психолога:\n1. Где это может включаться: " + recommendation.trigger()
+                + "\n2. Что сделать за 1-5 минут: " + recommendation.microAction()
+                + "\n3. Что вынести в дневник или терапию: " + recommendation.journalPrompt();
     }
 
-    private String fallbackRecommendation(ConversationSnapshot snapshot, List<String> keywords, String language) {
+    private RecommendationDetails fallbackRecommendation(ConversationSnapshot snapshot, List<String> keywords, String language) {
         String narrative = extractCurrentNarrative(snapshot).toLowerCase(Locale.ROOT);
         List<DetectedTheme> themes = detectThemes(narrative);
-        String joinedKeywords = keywords.isEmpty() ? (isEnglish(language) ? "the dream" : "\u044d\u0442\u043e\u0442 \u0441\u043e\u043d") : String.join(", ", keywords);
-        if (isEnglish(language)) {
-            String first = hasTheme(themes, "fear_threat") || hasTheme(themes, "home_boundaries")
-                ? "Over the next few days, notice which real-life situations bring back anxiety or a sense of reduced safety most quickly."
-                : hasTheme(themes, "shame_grief")
-                    ? "Over the next few days, gently notice where shame, sadness, or vulnerability show up around the same themes."
-                    : "Over the next few days, return to this dream as a clue to which feelings around " + joinedKeywords + " are especially alive right now.";
-            String second = hasTheme(themes, "deception_false_identity") || hasTheme(themes, "trust_mistrust")
-                ? "If a similar tension appears in relationships, ask yourself where trust feels thinner right now and which boundary needs clearer protection."
-                : hasTheme(themes, "protection_help")
-                    ? "If the same tension returns during the day, lean in advance on the kind of support that helps you regain steadiness and a sense of control."
-                    : "If the same feeling returns during the day, name the need or boundary that is asking for more attention.";
-            String third = "A short note about the dream, the feelings, and any repeating themes can help you bring this material into therapy or simply track it with more care and less self-criticism.";
-            return String.join(" ", first, second, third);
+        List<String> anchors = buildRecommendationAnchors(snapshot, keywords, themes, language);
+
+        String first = buildFallbackRecommendationTrigger(themes, anchors, language);
+        String second = buildFallbackRecommendationAction(themes, language);
+        String third = buildFallbackRecommendationReflection(themes, anchors, language);
+        return new RecommendationDetails(first, second, third);
+    }
+
+    private List<String> buildRecommendationAnchors(
+        ConversationSnapshot snapshot,
+        List<String> keywords,
+        List<DetectedTheme> themes,
+        String language
+    ) {
+        LinkedHashSet<String> anchors = new LinkedHashSet<>();
+
+        snapshot.selectedKeywords().stream()
+            .map(this::prettyKeyword)
+            .forEach(anchors::add);
+        keywords.stream()
+            .map(this::prettyKeyword)
+            .forEach(anchors::add);
+
+        if (anchors.isEmpty()) {
+            themes.stream()
+                .map(theme -> theme.label(language))
+                .forEach(anchors::add);
         }
-        String first = hasTheme(themes, "fear_threat") || hasTheme(themes, "home_boundaries")
-            ? "\u0412 \u0431\u043b\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0434\u043d\u0438 \u043f\u043e\u043b\u0435\u0437\u043d\u043e \u043e\u0442\u043c\u0435\u0447\u0430\u0442\u044c, \u0432 \u043a\u0430\u043a\u0438\u0445 \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u0445 \u0441\u0438\u0442\u0443\u0430\u0446\u0438\u044f\u0445 \u0431\u044b\u0441\u0442\u0440\u0435\u0435 \u0432\u0441\u0435\u0433\u043e \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442\u0441\u044f \u0442\u0440\u0435\u0432\u043e\u0433\u0430 \u0438\u043b\u0438 \u043e\u0449\u0443\u0449\u0435\u043d\u0438\u0435 \u043d\u0435\u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442\u0438."
-            : hasTheme(themes, "shame_grief")
-                ? "\u0412 \u0431\u043b\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0434\u043d\u0438 \u043f\u043e\u043b\u0435\u0437\u043d\u043e \u043c\u044f\u0433\u043a\u043e \u0437\u0430\u043c\u0435\u0447\u0430\u0442\u044c, \u0433\u0434\u0435 \u0440\u044f\u0434\u043e\u043c \u0441 \u044d\u0442\u043e\u0439 \u0442\u0435\u043c\u043e\u0439 \u043f\u043e\u0434\u043d\u0438\u043c\u0430\u044e\u0442\u0441\u044f \u0441\u0442\u044b\u0434, \u0433\u0440\u0443\u0441\u0442\u044c \u0438\u043b\u0438 \u0443\u044f\u0437\u0432\u0438\u043c\u043e\u0441\u0442\u044c."
-                : "\u0412 \u0431\u043b\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0434\u043d\u0438 \u043f\u043e\u043b\u0435\u0437\u043d\u043e \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0442\u044c\u0441\u044f \u043a \u044d\u0442\u043e\u043c\u0443 \u0441\u043d\u0443 \u043a\u0430\u043a \u043a \u043f\u043e\u0434\u0441\u043a\u0430\u0437\u043a\u0435 \u043e \u0442\u043e\u043c, \u043a\u0430\u043a\u0438\u0435 \u0447\u0443\u0432\u0441\u0442\u0432\u0430 \u0432\u043e\u043a\u0440\u0443\u0433 \u0442\u0435\u043c\u044b " + joinedKeywords + " \u0441\u0435\u0439\u0447\u0430\u0441 \u043e\u0441\u043e\u0431\u0435\u043d\u043d\u043e \u0436\u0438\u0432\u044b.";
-        String second = hasTheme(themes, "deception_false_identity") || hasTheme(themes, "trust_mistrust")
-            ? "\u0415\u0441\u043b\u0438 \u043f\u043e\u0445\u043e\u0436\u0435\u0435 \u043d\u0430\u043f\u0440\u044f\u0436\u0435\u043d\u0438\u0435 \u0432\u0441\u043f\u043b\u044b\u0432\u0430\u0435\u0442 \u0432 \u043e\u0442\u043d\u043e\u0448\u0435\u043d\u0438\u044f\u0445, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043d\u0430\u0437\u0432\u0430\u0442\u044c \u0441\u0435\u0431\u0435, \u0433\u0434\u0435 \u0441\u0435\u0439\u0447\u0430\u0441 \u0442\u0440\u0443\u0434\u043d\u0435\u0435 \u0434\u043e\u0432\u0435\u0440\u044f\u0442\u044c \u0438 \u043a\u0430\u043a\u0430\u044f \u0433\u0440\u0430\u043d\u0438\u0446\u0430 \u043d\u0443\u0436\u0434\u0430\u0435\u0442\u0441\u044f \u0432 \u0431\u043e\u043b\u0435\u0435 \u044f\u0441\u043d\u043e\u0439 \u0437\u0430\u0449\u0438\u0442\u0435."
-            : hasTheme(themes, "protection_help")
-                ? "\u0415\u0441\u043b\u0438 \u044d\u0442\u043e \u043d\u0430\u043f\u0440\u044f\u0436\u0435\u043d\u0438\u0435 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442\u0441\u044f \u0434\u043d\u0451\u043c, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0437\u0430\u0440\u0430\u043d\u0435\u0435 \u043e\u043f\u0435\u0440\u0435\u0442\u044c\u0441\u044f \u043d\u0430 \u0442\u043e\u0442 \u0441\u043f\u043e\u0441\u043e\u0431 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0438, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u043f\u043e\u043c\u043e\u0433\u0430\u0435\u0442 \u0432\u0435\u0440\u043d\u0443\u0442\u044c \u0432\u0430\u043c \u0443\u0441\u0442\u043e\u0439\u0447\u0438\u0432\u043e\u0441\u0442\u044c \u0438 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c."
-                : "\u0415\u0441\u043b\u0438 \u043f\u043e\u0445\u043e\u0436\u0435\u0435 \u0447\u0443\u0432\u0441\u0442\u0432\u043e \u0432\u0441\u043f\u043b\u044b\u0432\u0430\u0435\u0442 \u0434\u043d\u0451\u043c, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043d\u0430\u0437\u0432\u0430\u0442\u044c, \u043a\u0430\u043a\u0430\u044f \u043f\u043e\u0442\u0440\u0435\u0431\u043d\u043e\u0441\u0442\u044c \u0438\u043b\u0438 \u0433\u0440\u0430\u043d\u0438\u0446\u0430 \u0441\u0435\u0439\u0447\u0430\u0441 \u043f\u0440\u043e\u0441\u0438\u0442 \u0431\u043e\u043b\u044c\u0448\u0435 \u0432\u043d\u0438\u043c\u0430\u043d\u0438\u044f.";
-        String third = "\u041a\u043e\u0440\u043e\u0442\u043a\u0430\u044f \u0437\u0430\u043f\u0438\u0441\u044c \u0441\u043d\u0430, \u0447\u0443\u0432\u0441\u0442\u0432 \u0438 \u043f\u043e\u0432\u0442\u043e\u0440\u044f\u044e\u0449\u0438\u0445\u0441\u044f \u0442\u0435\u043c \u043c\u043e\u0436\u0435\u0442 \u043f\u043e\u043c\u043e\u0447\u044c \u043e\u0431\u0441\u0443\u0434\u0438\u0442\u044c \u044d\u0442\u043e \u0441 \u043f\u0441\u0438\u0445\u043e\u043b\u043e\u0433\u043e\u043c \u0438\u043b\u0438 \u043f\u0440\u043e\u0441\u0442\u043e \u0431\u0435\u0440\u0435\u0436\u043d\u043e \u043e\u0442\u0441\u043b\u0435\u0436\u0438\u0432\u0430\u0442\u044c \u0441\u0432\u043e\u044e \u0434\u0438\u043d\u0430\u043c\u0438\u043a\u0443 \u0431\u0435\u0437 \u0441\u0430\u043c\u043e\u043a\u0440\u0438\u0442\u0438\u043a\u0438.";
-        return String.join(" ", first, second, third);
+
+        if (anchors.isEmpty()) {
+            anchors.add(isEnglish(language) ? "this dream" : "этот сон");
+        }
+
+        return anchors.stream().limit(3).toList();
+    }
+
+    private String buildFallbackRecommendationTrigger(List<DetectedTheme> themes, List<String> anchors, String language) {
+        String joinedAnchors = String.join(", ", anchors);
+        if (isEnglish(language)) {
+            if (hasTheme(themes, "deception_false_identity") || hasTheme(themes, "trust_mistrust")) {
+                return "Over the next few days, watch for moments when a familiar person, role, or story suddenly starts to feel doubtful or misleading, especially around themes like " + joinedAnchors + ".";
+            }
+            if (hasTheme(themes, "school_authority") && hasTheme(themes, "shame_grief")) {
+                return "Pay special attention to situations where you feel examined, judged, or pushed to justify yourself and shame rises quickly around that moment.";
+            }
+            if (hasTheme(themes, "fear_threat") && hasTheme(themes, "protection_help")) {
+                return "Notice the exact point where ordinary tension turns into a sense of threat and an urgent need to protect yourself or call in support.";
+            }
+            if (hasTheme(themes, "home_boundaries")) {
+                return "Look closely at situations where someone else's space, intrusion, or broken distance makes you tense up or lose trust very quickly.";
+            }
+            return "Return not to the whole dream at once, but to the concrete motifs " + joinedAnchors + " and notice in which daytime situations they come alive most strongly.";
+        }
+
+        if (hasTheme(themes, "deception_false_identity") || hasTheme(themes, "trust_mistrust")) {
+            return "В ближайшие дни обращайте внимание на моменты, когда знакомый человек, привычная роль или семейная история внезапно начинают казаться сомнительными, особенно рядом с мотивами " + joinedAnchors + ".";
+        }
+        if (hasTheme(themes, "school_authority") && hasTheme(themes, "shame_grief")) {
+            return "Особенно важно замечать ситуации, где вас будто снова ставят в позицию оцениваемого человека и вместе с этим быстро поднимаются стыд, вина или желание оправдываться.";
+        }
+        if (hasTheme(themes, "fear_threat") && hasTheme(themes, "protection_help")) {
+            return "Отмечайте не тревогу вообще, а тот момент, когда напряжение резко превращается в ощущение опасности и в потребность срочно защищаться или искать поддержку.";
+        }
+        if (hasTheme(themes, "home_boundaries")) {
+            return "Присмотритесь к эпизодам, где чужое пространство, вторжение или нарушение дистанции вызывают у вас резкое сжатие, недоверие или желание закрыться.";
+        }
+        return "Возвращайтесь не ко всему сну сразу, а к конкретным мотивам " + joinedAnchors + " и смотрите, в каких дневных ситуациях они оживают сильнее всего.";
+    }
+
+    private String buildFallbackRecommendationAction(List<DetectedTheme> themes, String language) {
+        if (isEnglish(language)) {
+            if (hasTheme(themes, "deception_false_identity") || hasTheme(themes, "trust_mistrust")) {
+                return "When that feeling appears, pause for a minute and ask yourself two concrete questions: what exactly feels untrustworthy here, and which one boundary or fact do I need to verify right now?";
+            }
+            if (hasTheme(themes, "school_authority") && hasTheme(themes, "shame_grief")) {
+                return "If shame switches on, separate the outer fact from the inner conclusion about yourself by naming what actually happened and what you automatically decided it says about you.";
+            }
+            if (hasTheme(themes, "protection_help")) {
+                return "If the tension escalates fast, choose one ready-made support action in advance: message one trusted person, step out of the interaction, verify one fact, or say aloud what is not acceptable for you.";
+            }
+            if (hasTheme(themes, "home_boundaries")) {
+                return "In that moment, name what feels yours, what feels foreign, and what small action would return a sense of control to you.";
+            }
+            return "When the same tension returns, try to name within 1-2 minutes the feeling, the need behind it, and the boundary that most needs protection right now.";
+        }
+
+        if (hasTheme(themes, "deception_false_identity") || hasTheme(themes, "trust_mistrust")) {
+            return "Когда такое чувство появляется, остановитесь на минуту и уточните для себя две вещи: что именно здесь не вызывает доверия и какую одну границу или факт вам нужно проверить прямо сейчас.";
+        }
+        if (hasTheme(themes, "school_authority") && hasTheme(themes, "shame_grief")) {
+            return "Если включается стыд, попробуйте разделить внешний факт и внутренний вывод о себе: коротко назвать, что реально произошло, и что вы автоматически себе приписали.";
+        }
+        if (hasTheme(themes, "protection_help")) {
+            return "Если напряжение быстро нарастает, заранее выберите один способ опоры: написать конкретному человеку, выйти из разговора, перепроверить один факт или вслух обозначить, что для вас сейчас неприемлемо.";
+        }
+        if (hasTheme(themes, "home_boundaries")) {
+            return "В такой момент полезно сразу назвать, что здесь для вас своё, что чужое и какое небольшое действие вернёт вам ощущение контроля над ситуацией.";
+        }
+        return "Когда это напряжение возвращается, попробуйте за 1-2 минуты назвать чувство, потребность и ту границу, которая сейчас просит самой ясной защиты.";
+    }
+
+    private String buildFallbackRecommendationReflection(List<DetectedTheme> themes, List<String> anchors, String language) {
+        String joinedAnchors = String.join(", ", anchors);
+        if (isEnglish(language)) {
+            if (hasTheme(themes, "deception_false_identity")) {
+                return "For journaling or therapy, take three questions: whom did I need to recognize in the dream, at what point did trust break, and what helped me regain a sense of footing?";
+            }
+            if (hasTheme(themes, "school_authority") && hasTheme(themes, "family_identity")) {
+                return "For deeper work, write briefly whose gaze felt evaluating, how that shame linked back to family or father material, and when you first started protecting yourself.";
+            }
+            if (hasTheme(themes, "protection_help")) {
+                return "If you continue with this dream, write down the moment you stopped feeling helpless, whom you could call on, and which form of protection you want to carry more often into waking life.";
+            }
+            if (hasTheme(themes, "home_boundaries")) {
+                return "For therapy or a journal, it may help to describe where distance was broken, how your body noticed it, and which boundary was missing there.";
+            }
+            return "For a short note or therapy session, choose one turning point from the dream around " + joinedAnchors + " and write what you felt there, what it echoes in waking life, and what support would have helped most.";
+        }
+
+        if (hasTheme(themes, "deception_false_identity")) {
+            return "Для записи или разговора с психологом можно взять три вопроса: кого во сне нужно было распознать, в какой момент доверие сломалось и что помогло вам снова почувствовать опору.";
+        }
+        if (hasTheme(themes, "school_authority") && hasTheme(themes, "family_identity")) {
+            return "Для более глубокой работы полезно письменно ответить, чей взгляд во сне был для вас оценивающим, что связывало этот стыд с фигурой отца и в какой момент вы начали защищать себя.";
+        }
+        if (hasTheme(themes, "protection_help")) {
+            return "Если захотите продолжить эту тему, запишите отдельно, в какой точке вы перестали чувствовать себя беспомощно, кого смогли позвать на помощь и какой способ защиты хочется чаще переносить в реальность.";
+        }
+        if (hasTheme(themes, "home_boundaries")) {
+            return "Для дневника или терапии может быть особенно ценно описать, где во сне была нарушена дистанция, как тело это заметило и какой границы вам не хватило в тот момент.";
+        }
+        return "Для дневника или терапии выберите один поворотный момент сна вокруг тем " + joinedAnchors + " и кратко запишите, что вы тогда почувствовали, что это напоминает в реальной жизни и какая поддержка была бы там уместной.";
     }
 
     private String sanitizeOutputText(String text) {
@@ -1110,7 +1294,7 @@ public class OllamaDreamAiService implements DreamAiService {
         String title,
         List<String> keywords,
         String interpretation,
-        String recommendation
+        RecommendationDetails recommendation
     ) {
         public List<String> keywords() {
             return keywords == null ? List.of() : keywords;

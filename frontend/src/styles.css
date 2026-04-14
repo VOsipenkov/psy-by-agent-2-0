@@ -1023,6 +1023,31 @@ body::after {
   gap: 12px;
 }
 
+.recommendation-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.recommendation-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(245, 249, 252, 0.9));
+  border: 1px solid rgba(17, 33, 54, 0.08);
+  box-shadow: 0 12px 30px rgba(8, 20, 33, 0.05);
+}
+
+.recommendation-kicker {
+  font-size: 0.72rem;
+  line-height: 1.2;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(17, 33, 54, 0.54);
+}
+
 .insight-recommendation {
   display: grid;
   gap: 12px;

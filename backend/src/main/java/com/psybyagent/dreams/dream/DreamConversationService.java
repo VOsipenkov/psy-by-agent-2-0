@@ -94,6 +94,7 @@ public class DreamConversationService {
         conversation.setStage(DreamStage.COLLECTING_EMOTIONS);
         conversation.setInterpretation(null);
         conversation.setRecommendation(null);
+        conversation.setRecommendationDetails(null);
         conversation.getKeywords().clear();
         conversation.getKeywords().addAll(keywordCandidates);
         conversation.addMessage(DreamMessage.assistant(emotionPrompt(language)));
@@ -123,7 +124,8 @@ public class DreamConversationService {
         if (aiResult.stage() == DreamStage.INTERPRETED) {
             conversation.setStage(DreamStage.INTERPRETED);
             conversation.setInterpretation(aiResult.interpretation());
-            conversation.setRecommendation(aiResult.recommendation());
+            conversation.setRecommendation(null);
+            conversation.setRecommendationDetails(aiResult.recommendation());
             conversation.setTitle(aiResult.title());
             conversation.getKeywords().clear();
             conversation.getKeywords().addAll(selectedKeywords);
@@ -145,7 +147,8 @@ public class DreamConversationService {
         if (aiResult.stage() == DreamStage.INTERPRETED) {
             conversation.setStage(DreamStage.INTERPRETED);
             conversation.setInterpretation(aiResult.interpretation());
-            conversation.setRecommendation(aiResult.recommendation());
+            conversation.setRecommendation(null);
+            conversation.setRecommendationDetails(aiResult.recommendation());
             conversation.setTitle(aiResult.title());
             conversation.getKeywords().clear();
             conversation.getKeywords().addAll(persistedKeywords);
@@ -415,12 +418,18 @@ public class DreamConversationService {
             ))
             .toList();
 
+        RecommendationDetails recommendationDetails = conversation.getRecommendationDetails();
+        String recommendationText = recommendationDetails == null
+            ? conversation.getRecommendation()
+            : RecommendationTextFormatter.toPlainText(recommendationDetails);
+
         return new DreamConversationDetailResponse(
             conversation.getId(),
             conversation.getTitle(),
             conversation.getStage().name(),
             conversation.getInterpretation(),
-            conversation.getRecommendation(),
+            recommendationText,
+            recommendationDetails,
             List.copyOf(conversation.getKeywords()),
             messages,
             conversation.getUpdatedAt()

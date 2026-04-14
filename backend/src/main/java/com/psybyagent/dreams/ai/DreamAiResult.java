@@ -1,6 +1,7 @@
 package com.psybyagent.dreams.ai;
 
 import com.psybyagent.dreams.dream.DreamStage;
+import com.psybyagent.dreams.dream.RecommendationDetails;
 import java.util.List;
 
 public record DreamAiResult(
@@ -9,6 +10,6 @@ public record DreamAiResult(
     String title,
     List<String> keywords,
     String interpretation,
-    String recommendation
+    RecommendationDetails recommendation
 ) {
 }

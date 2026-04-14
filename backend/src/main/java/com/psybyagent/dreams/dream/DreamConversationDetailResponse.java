@@ -10,6 +10,7 @@ public record DreamConversationDetailResponse(
     String stage,
     String interpretation,
     String recommendation,
+    RecommendationDetails recommendationDetails,
     List<String> keywords,
     List<DreamMessageResponse> messages,
     Instant updatedAt

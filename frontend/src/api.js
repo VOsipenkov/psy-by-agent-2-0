@@ -219,8 +219,9 @@ function createInitialMockDb() {
       keywords: ['Спешка', 'Поезд', 'Тревога'],
       interpretation:
         'Здесь особенно заметны лес, поезд и дождь. Лес часто отражает период неопределенности, поезд связан с движением и неизбежными переменами, а дождь показывает эмоциональную разрядку. В сумме сон похож на внутренний сюжет о том, как вы проходите тревожный этап и все же входите в новое состояние с ощущением облегчения.',
+      recommendationDetails: buildRecommendationDetails(['Спешка', 'Поезд', 'Тревога'], 'ru'),
       recommendation:
-        'В ближайшие дни полезно замечать, в каких ситуациях снова включается спешка и внутреннее чувство, что вы можете не успеть. Если это напряжение поднимается, попробуйте на минуту замедлиться и назвать себе, какая опора нужна именно сейчас. Короткая запись таких моментов поможет увидеть, где тревога уже начинает превращаться в движение вперед, а не только в давление.',
+        formatRecommendationDetails(buildRecommendationDetails(['Спешка', 'Поезд', 'Тревога'], 'ru'), 'ru'),
     },
   );
 
@@ -247,8 +248,9 @@ function createInitialMockDb() {
       keywords: ['Дом', 'Дверь', 'Вода'],
       interpretation:
         'В этом сне особенно выделяются старый дом, вода и закрытая дверь. Такой сюжет часто связан с памятью, эмоциональной глубиной и частью внутреннего опыта, к которой вы уже подошли, но еще не готовы войти до конца. Любопытство рядом с тревогой показывает, что внутри назревает важное соприкосновение с чем-то личным и давно знакомым.',
+      recommendationDetails: buildRecommendationDetails(['Дом', 'Дверь', 'Вода'], 'ru'),
       recommendation:
-        'Полезно мягко отмечать, какие темы из прошлого сейчас снова просят внимания, но без попытки сразу все открыть до конца. Если похожее чувство появляется днем, попробуйте спросить себя, что именно сейчас хочется приблизить, а что пока важно оставить в безопасной дистанции. Такой темп обычно помогает входить в чувствительные переживания бережнее и устойчивее.',
+        formatRecommendationDetails(buildRecommendationDetails(['Дом', 'Дверь', 'Вода'], 'ru'), 'ru'),
     },
   );
 
@@ -276,6 +278,7 @@ function createSeedDream(db, userId, messages, overrides = {}) {
     keywords: [],
     interpretation: null,
     recommendation: null,
+    recommendationDetails: null,
     updatedAt: messages.at(-1)?.createdAt ?? new Date().toISOString(),
     messages,
     ...overrides,
@@ -302,6 +305,7 @@ function createEmptyDream(db, userId, language = 'ru') {
     keywords: [],
     interpretation: null,
     recommendation: null,
+    recommendationDetails: null,
     updatedAt: now,
     messages: [
       {
@@ -544,8 +548,8 @@ function buildInterpretation(dreamText, emotions, keywords, language = 'ru') {
   return parts.join(' ');
 }
 
-function buildAssistantInterpretationMessage(keywords, interpretation, language = 'ru') {
-  const recommendation = buildRecommendation(keywords, language);
+function buildAssistantInterpretationMessage(keywords, interpretation, recommendationDetails, language = 'ru') {
+  const recommendation = formatRecommendationDetails(recommendationDetails, language);
 
   if (normalizeLanguage(language) === 'en') {
     return `I would keep these motifs in focus: ${keywords.join(', ')}.\n\n${interpretation}\n\nPsychologist's recommendation:\n${recommendation}`;
@@ -554,15 +558,56 @@ function buildAssistantInterpretationMessage(keywords, interpretation, language 
   return `Я бы держал в фокусе такие мотивы: ${keywords.join(', ')}.\n\n${interpretation}\n\nРекомендация психолога:\n${recommendation}`;
 }
 
-function buildRecommendation(keywords, language = 'ru') {
+function buildRecommendationDetails(keywords, language = 'ru') {
   const normalizedLanguage = normalizeLanguage(language);
   const focus = keywords.length ? keywords.join(', ') : (normalizedLanguage === 'en' ? 'the dream' : 'этот сон');
 
   if (normalizedLanguage === 'en') {
-    return `Over the next few days, notice which situations bring back the same feelings around ${focus}. If that tension returns, name the boundary, need, or relationship that feels most sensitive right now. A short note after the dream can help you bring this material into therapy or simply reflect on it with more care.`;
+    return {
+      trigger: `Watch for real-life situations where the same tension around ${focus} returns most quickly.`,
+      microAction: 'When it returns, name one fact you know for sure, one feeling that rose first, and one boundary that needs protection now.',
+      journalPrompt: `For journaling or therapy, choose one turning point around ${focus} and write what changed there, what it reminds you of, and what support would have helped.`,
+    };
   }
 
-  return `В ближайшие дни полезно замечать, в каких ситуациях возвращаются похожие чувства вокруг темы ${focus}. Если это напряжение снова поднимается, попробуйте назвать, какая граница, потребность или связь сейчас ощущается самой чувствительной. Короткая запись после сна может помочь обсудить это с психологом или просто бережнее отнестись к своим повторяющимся переживаниям.`;
+  return {
+    trigger: `Смотрите, в каких реальных ситуациях быстрее всего возвращается похожее напряжение вокруг темы ${focus}.`,
+    microAction: 'Когда оно поднимается, назовите один факт, в котором вы уверены, первое чувство, которое включилось, и одну границу, которую сейчас важно защитить.',
+    journalPrompt: `Для дневника или разговора с психологом выберите один поворотный момент вокруг темы ${focus} и запишите, что там изменилось, что это напоминает в жизни и какая поддержка была бы уместна.`,
+  };
+}
+
+function formatRecommendationDetails(recommendationDetails, language = 'ru') {
+  if (!recommendationDetails) {
+    return '';
+  }
+
+  const trigger = recommendationDetails.trigger?.trim();
+  const microAction = recommendationDetails.microAction?.trim();
+  const journalPrompt = recommendationDetails.journalPrompt?.trim();
+  const parts = [trigger, microAction, journalPrompt].filter(Boolean);
+
+  if (!parts.length) {
+    return '';
+  }
+
+  if (normalizeLanguage(language) === 'en') {
+    return [
+      trigger ? `1. Trigger: ${trigger}` : null,
+      microAction ? `2. Micro-action: ${microAction}` : null,
+      journalPrompt ? `3. Journal prompt: ${journalPrompt}` : null,
+    ].filter(Boolean).join('\n');
+  }
+
+  return [
+    trigger ? `1. Где это может включаться: ${trigger}` : null,
+    microAction ? `2. Что сделать за 1-5 минут: ${microAction}` : null,
+    journalPrompt ? `3. Что вынести в дневник или терапию: ${journalPrompt}` : null,
+  ].filter(Boolean).join('\n');
+}
+
+function buildRecommendation(keywords, language = 'ru') {
+  return formatRecommendationDetails(buildRecommendationDetails(keywords, language), language);
 }
 
 function appendAssistantMessage(db, dream, content) {
@@ -662,6 +707,7 @@ function advanceMockConversation(db, dream, language = 'ru') {
       dream.keywords = extractKeywords(dreamDescription, normalizedLanguage, 12);
       dream.interpretation = null;
       dream.recommendation = null;
+      dream.recommendationDetails = null;
       dream.stage = 'COLLECTING_EMOTIONS';
       appendAssistantMessage(db, dream, getEmotionPrompt(normalizedLanguage));
       return;
@@ -681,24 +727,28 @@ function advanceMockConversation(db, dream, language = 'ru') {
       }
 
       const interpretation = buildInterpretation(dreamDescription, emotionDescription, selectedKeywords, normalizedLanguage);
-      const recommendation = buildRecommendation(selectedKeywords, normalizedLanguage);
+      const recommendationDetails = buildRecommendationDetails(selectedKeywords, normalizedLanguage);
+      const recommendation = formatRecommendationDetails(recommendationDetails, normalizedLanguage);
       dream.keywords = selectedKeywords;
       dream.title = inferDreamTitle(`${dreamDescription} ${emotionDescription}`, selectedKeywords, normalizedLanguage);
       dream.stage = 'INTERPRETED';
       dream.interpretation = interpretation;
       dream.recommendation = recommendation;
-      appendAssistantMessage(db, dream, buildAssistantInterpretationMessage(selectedKeywords, interpretation, normalizedLanguage));
+      dream.recommendationDetails = recommendationDetails;
+      appendAssistantMessage(db, dream, buildAssistantInterpretationMessage(selectedKeywords, interpretation, recommendationDetails, normalizedLanguage));
       return;
     }
     case 'INTERPRETED': {
       const allUserText = userMessages.join(' ');
       const selectedKeywords = dream.keywords?.length ? dream.keywords : extractKeywords(allUserText, normalizedLanguage, 6);
       const interpretation = buildInterpretation(dreamDescription, `${emotionDescription} ${userMessages.slice(3).join(' ')}`.trim(), selectedKeywords, normalizedLanguage);
-      const recommendation = buildRecommendation(selectedKeywords, normalizedLanguage);
+      const recommendationDetails = buildRecommendationDetails(selectedKeywords, normalizedLanguage);
+      const recommendation = formatRecommendationDetails(recommendationDetails, normalizedLanguage);
       dream.interpretation = interpretation;
       dream.recommendation = recommendation;
+      dream.recommendationDetails = recommendationDetails;
       dream.title = inferDreamTitle(allUserText, selectedKeywords, normalizedLanguage);
-      appendAssistantMessage(db, dream, buildAssistantInterpretationMessage(selectedKeywords, interpretation, normalizedLanguage));
+      appendAssistantMessage(db, dream, buildAssistantInterpretationMessage(selectedKeywords, interpretation, recommendationDetails, normalizedLanguage));
       return;
     }
     default:

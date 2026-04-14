@@ -15,8 +15,10 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.util.StringUtils;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -45,6 +47,15 @@ public class DreamConversation extends AuditableEntity {
     @Column(columnDefinition = "TEXT")
     private String recommendation;
 
+    @Column(name = "recommendation_trigger", columnDefinition = "TEXT")
+    private String recommendationTrigger;
+
+    @Column(name = "recommendation_micro_action", columnDefinition = "TEXT")
+    private String recommendationMicroAction;
+
+    @Column(name = "recommendation_journal_prompt", columnDefinition = "TEXT")
+    private String recommendationJournalPrompt;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "dream_keywords", joinColumns = @JoinColumn(name = "conversation_id"))
     @Column(name = "keyword", nullable = false, length = 64)
@@ -59,5 +70,32 @@ public class DreamConversation extends AuditableEntity {
         message.setConversation(this);
         messages.add(message);
         touch();
+    }
+
+    @Transient
+    public RecommendationDetails getRecommendationDetails() {
+        RecommendationDetails details = new RecommendationDetails(
+            recommendationTrigger,
+            recommendationMicroAction,
+            recommendationJournalPrompt
+        );
+        return details.isEmpty() ? null : details;
+    }
+
+    public void setRecommendationDetails(RecommendationDetails recommendationDetails) {
+        if (recommendationDetails == null || recommendationDetails.isEmpty()) {
+            recommendationTrigger = null;
+            recommendationMicroAction = null;
+            recommendationJournalPrompt = null;
+            return;
+        }
+
+        recommendationTrigger = normalizeRecommendationPart(recommendationDetails.trigger());
+        recommendationMicroAction = normalizeRecommendationPart(recommendationDetails.microAction());
+        recommendationJournalPrompt = normalizeRecommendationPart(recommendationDetails.journalPrompt());
+    }
+
+    private String normalizeRecommendationPart(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 }

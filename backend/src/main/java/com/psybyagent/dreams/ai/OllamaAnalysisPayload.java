@@ -1,5 +1,6 @@
 package com.psybyagent.dreams.ai;
 
+import com.psybyagent.dreams.dream.RecommendationDetails;
 import java.util.List;
 
 public record OllamaAnalysisPayload(
@@ -8,6 +9,6 @@ public record OllamaAnalysisPayload(
     String title,
     List<String> keywords,
     String interpretation,
-    String recommendation
+    RecommendationDetails recommendation
 ) {
 }

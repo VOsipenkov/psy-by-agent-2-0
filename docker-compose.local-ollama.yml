@@ -2,7 +2,7 @@ services:
   backend:
     environment:
       APP_OLLAMA_BASE_URL: ${APP_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      APP_OLLAMA_MODEL: ${APP_OLLAMA_MODEL:-qwen3:4b}
+      APP_OLLAMA_MODEL: ${APP_OLLAMA_MODEL:-qwen3.5:cloud}
       APP_OLLAMA_TIMEOUT: ${APP_OLLAMA_TIMEOUT:-6m}
     extra_hosts:
       - "host.docker.internal:host-gateway"
